@@ -1,0 +1,38 @@
+{
+  "name": "error-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "벤더 격리 어댑터 — Sentry(reporter)·sonner(presenter)·pager(notifier). 각 진입점은 독립적으로 import하며, 벤더 SDK는 optional peerDependency.",
+  "sideEffects": false,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf .turbo node_modules"
+  },
+  "dependencies": {
+    "error-core": "workspace:*",
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "@sentry/nextjs": "^8.0.0",
+    "sonner": "^1.7.0"
+  },
+  "peerDependenciesMeta": {
+    "@sentry/nextjs": { "optional": true },
+    "sonner": { "optional": true }
+  },
+  "devDependencies": {
+    "@sentry/nextjs": "^8.50.0",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "react": "^19.0.0",
+    "sonner": "^1.7.4",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

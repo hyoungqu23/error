@@ -1,0 +1,27 @@
+{
+  "name": "error-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "프레임워크·벤더 무관 에러 커널. 레지스트리(SSOT)·정책 해소·정규화·직렬화 누출 게이트·텔레메트리 계약·순수 재시도 정책·네트워크 경계. 의존성: zod.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf .turbo node_modules"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

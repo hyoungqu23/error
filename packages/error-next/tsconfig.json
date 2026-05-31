@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["node", "react", "react-dom"],
+    "paths": {
+      "@/components/*": ["./src/components/*"],
+      "@/error/adapters/*": ["../error-adapters/src/*", "../error-core/src/adapters/*"],
+      "@/error/*": ["./src/*", "../error-core/src/*"]
+    }
+  },
+  "include": ["src", "types"]
+}

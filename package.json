@@ -1,0 +1,22 @@
+{
+  "name": "error-architecture",
+  "private": true,
+  "version": "0.1.0",
+  "description": "통합 에러 시스템 모노레포 — error-core / error-adapters / error-next 패키지와 Next.js 16 레퍼런스 앱",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.16",
+    "typescript": "^5.7.3"
+  }
+}

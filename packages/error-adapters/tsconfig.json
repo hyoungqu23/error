@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@/error/adapters/*": ["./src/*", "../error-core/src/adapters/*"],
+      "@/error/*": ["../error-core/src/*"]
+    }
+  },
+  "include": ["src", "types"]
+}
