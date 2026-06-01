@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { decisionSystem, loginAction, checkoutAction, productQuery, backgroundPrefetch, adminPage } from "../demo";
+import {
+  decisionSystem,
+  loginAction,
+  checkoutAction,
+  productQuery,
+  searchProducts,
+  backgroundPrefetch,
+  adminPage,
+} from "../demo";
 import { appError, fail } from "../index";
 
 describe("Error Decision System", () => {
@@ -22,6 +30,7 @@ describe("Error Decision System", () => {
     if (result.ok) return;
     expect(result.decision.user.surface).toBe("form");
     expect(result.decision.user.disclosure).toBe("safe-vague");
+    expect(result.decision.user.messageKey).toBe("error.invalidCredentials.safe");
     expect(result.payload.details).toBeUndefined();
   });
 
@@ -75,6 +84,17 @@ describe("Error Decision System", () => {
     expect(failure.ok).toBe(false);
     if (failure.ok) return;
     expect(failure.decision.user.action).toBe("go-back");
+    expect(failure.decision.user.surface).toBe("page");
+    expect(failure.decision.user.disclosure).toBe("safe-vague");
+  });
+
+  it("search not found maps to empty state without code branching in UI", async () => {
+    const failure = await searchProducts({ query: "empty" });
+    expect(failure.ok).toBe(false);
+    if (failure.ok) return;
+    expect(failure.decision.user.surface).toBe("empty");
+    expect(failure.decision.user.action).toBe("none");
+    expect(failure.decision.user.disclosure).toBe("specific");
   });
 
   it("escape hatch can override telemetry without bypassing decision execution", () => {
@@ -125,7 +145,7 @@ describe("Error Decision System", () => {
 
   it("operation names are runtime-validated when no typed union is available", () => {
     expect(() =>
-      decisionSystem.makeOccurrence("unknown.operation", {
+      decisionSystem.makeOccurrence("unknown.operation" as never, {
         interaction: "query",
         uiScope: "component",
       }),
