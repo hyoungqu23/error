@@ -304,12 +304,18 @@ const signup = defineFormAction("auth.signup", schema, async (input) => {
 UI는 decision을 받아 렌더링한다.
 
 ```tsx
-const state = useFormAction(signup);
+const form = useFormAction(signup);
 
 return (
-  <form action={state.action}>
-    <EmailField error={state.fieldError("email")} />
-    <ErrorSurface decision={state.errorDecision} />
+  <form
+    onSubmit={(event) => {
+      event.preventDefault();
+      void form.submit(readInput(event.currentTarget));
+    }}
+  >
+    <EmailField error={form.fieldError("email")} />
+    <ErrorSurface decision={form.errorDecision} />
+    <button disabled={form.isPending}>가입</button>
   </form>
 );
 ```
@@ -483,25 +489,26 @@ Escape hatch는 "시스템 밖으로 나가기"가 아니라 "시스템 안에�
 
 타입은 개발자를 돕는 방향이어야 한다.
 
-에러 코드별 details 타입을 추론할 수 있으면 좋다.
+에러 코드별 details 타입을 추론할 수 있어야 한다. `decisionSystem.fail`/`appError`(catalog-typed)는 각 `ErrorSemantics.validateDetails` type-guard에서 details shape를 추론한다.
 
 ```ts
-fail("VALIDATION", {
+decisionSystem.fail("VALIDATION", {
   fieldErrors: {
     email: ["Invalid email"],
   },
 });
 ```
 
-반대로 잘못된 details는 막아야 한다.
+반대로 잘못된 details는 컴파일 타임에 막힌다. `INVALID_CREDENTIALS`는 details를 `null`로 선언하므로:
 
 ```ts
-fail("INVALID_CREDENTIALS", {
+decisionSystem.fail("INVALID_CREDENTIALS", {
   passwordWasWrong: true,
 });
+// ^ 타입 에러 — 보안상 공개되면 안 되는 값이 코드에서 차단된다.
 ```
 
-이런 값은 보안상 공개되면 안 되므로 타입이나 schema에서 막는 편이 좋다.
+(확장용 free `fail`/`appError`는 catalog를 모르므로 느슨하다. 타입 강제가 필요하면 system-bound 버전을 쓴다.)
 
 Operation도 가능하면 typed union으로 좁힌다.
 
@@ -665,7 +672,7 @@ catch (error) {
 더 좋은 예:
 
 ```ts
-const result = useDecisionQuery(query);
+const result = useDecisionQuery(query, input);
 return <ErrorSurface decision={result.errorDecision} />;
 ```
 
@@ -690,22 +697,36 @@ defineFormAction("auth.login", ...)
 ```ts
 defineOperation(name, meta);
 
-defineFormAction(operation, schema, handler);
+defineFormAction(operation, handler);          // 2-arg
+defineFormAction(operation, schema, handler);  // 3-arg: schema.parse 실패 -> 자동 VALIDATION
 defineServerAction(operation, handler);
 defineQuery(operation, handler);
 defineBackgroundTask(operation, handler);
+defineRouteGuard(operation, handler);
 protectedPage(operation, handler);
+withRenderBoundary(operation, handler);
 
 ok(data);
-fail(code, details?, options?);
-appError(code, details?, options?);
+fail(code, details?, options?);            // free: 느슨
+appError(code, details?, options?);        // free: 느슨
+decisionSystem.fail(code, details?, ...);  // catalog-typed: code별 details 강제
+decisionSystem.appError(code, details?, ...);
 
 resolveErrorDecision(input);
-executeErrorDecision(error, decision, ctx);
+executeErrorDecision(error, decision, ctx, sinks);
 
-useErrorDecision(error, occurrence?);
-ErrorSurface;
+// React (peer dep)
+// "error-decision-system/react" — RSC-safe (ErrorSurface)
+ErrorSurface;                  // slots / fieldErrors / target
+// "error-decision-system/react-hooks" — "use client"
+useFormAction(action);         // submit / isPending / errorDecision
+useDecisionQuery(query, input); // data / errorDecision / isLoading
+DecisionSystemProvider;        // useErrorDecision용 system 주입
+useErrorDecision(error, occurrence); // raw error -> ErrorDecision
+useDecisionRedirect(decision, navigate); // redirect surface -> navigate
 ```
+
+> 구현 상태: 위 API는 모두 `packages/error-decision-system`에 구현되어 있다(typecheck + 43 tests). per-code details 타입은 `decisionSystem.fail`/`appError`에서 강제된다(`fail("INVALID_CREDENTIALS", {x})`는 컴파일 에러). redirect 실제 navigation은 `useDecisionRedirect`가 `decision.user.target`(`ErrorSemantics.redirectTarget`)으로 수행한다.
 
 중요한 점은 대부분의 feature code가 아래 네 개만 쓰게 하는 것이다.
 

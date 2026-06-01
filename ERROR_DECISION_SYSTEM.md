@@ -208,6 +208,15 @@ interface ErrorSemantics {
   defaultHttpStatus: number;
   defaultRetryable: boolean;
   defaultMessageKey: string;
+  messageKeys?: Partial<Record<DisclosureLevel, string>>;
+  disclosureByUiScope?: Partial<Record<UiScope, DisclosureLevel>>;
+  disclosureByResource?: Partial<Record<string, DisclosureLevel>>;
+  defaultAction?: UserAction;
+  actionByUiScope?: Partial<Record<UiScope, UserAction>>;
+  actionByInteraction?: Partial<Record<InteractionKind, UserAction>>;
+  actionByResource?: Partial<Record<string, UserAction>>;
+  surfaceByResource?: Partial<Record<string, ErrorSurface>>;
+  telemetryBySurface?: Partial<Record<ErrorSurface, Partial<TelemetryDecision>>>;
   detailsExposure: "none" | "allowlist";
   detailsAllowlist?: readonly string[];
 }
@@ -220,6 +229,8 @@ Semantics가 알아야 하는 것:
 - 기본 HTTP status는 무엇인가
 - details를 공개할 수 있는가
 - 기본 message key는 무엇인가
+- disclosure 수준별로 어떤 message key를 써야 하는가
+- 특정 resource/scope에서 기본 action 또는 surface가 달라지는가
 
 Semantics가 직접 결정하지 않아야 하는 것:
 
@@ -228,6 +239,8 @@ Semantics가 직접 결정하지 않아야 하는 것:
 - alert 여부
 - 특정 React component
 - 특정 화면의 field mapping
+
+단, semantics는 resolver가 code 문자열을 하드코딩하지 않도록 decision hint를 가질 수 있다. 예를 들어 `AUTH_REQUIRED`가 기본적으로 `login` action을 갖거나, `NOT_FOUND + resource: "collection"`이 `empty` surface를 갖는다는 사실은 resolver 코드의 `if (code === "...")`보다 registry data에 두는 편이 낫다.
 
 ### Occurrence Context
 
@@ -288,6 +301,16 @@ type DisclosureLevel =
 | `pii` | `safe-vague` 또는 `support-only` | 개인정보 노출 방지 |
 | `business-sensitive` | `safe-vague` | 가격, 정책, 심사 사유 보호 |
 | `internal` | `generic` 또는 `support-only` | 내부 구현 정보 보호 |
+
+Disclosure는 message selection을 강제해야 한다.
+
+```ts
+const messageKey =
+  semantics.messageKeys?.[decision.disclosure] ??
+  semantics.defaultMessageKey;
+```
+
+`safe-vague`나 `support-only`를 결정했는데도 민감한 `defaultMessageKey`를 그대로 쓰면 disclosure policy는 권고에 그친다. 안전한 copy는 registry 또는 localization layer에서 구조적으로 선택되어야 한다.
 
 ### User Actionability
 
@@ -453,6 +476,16 @@ Boundary helper는 개발자가 사건 맥락을 반복해서 쓰지 않게 한�
 | `defineBackgroundTask()` | `interaction: "background-sync"`, `uiScope: "background"` |
 | `withRenderBoundary()` | `interaction: "render"`, `uiScope: "page"` |
 
+Precedence는 명시적으로 정한다.
+
+```txt
+call-site occurrence override
+  > boundary helper defaults
+  > operation registry default
+```
+
+Boundary는 "이번 실패가 어떤 문에서 들어왔는가"를 설명한다. 따라서 background boundary가 `uiScope: "background"`를 채웠다면 operation registry의 `defaultUiScope: "form"`이 이를 조용히 덮으면 안 된다. Operation registry의 scope는 helper가 scope를 모를 때 쓰는 fallback이다.
+
 ### 80 / 15 / 5 API
 
 API는 사용 빈도에 따라 나뉘어야 한다.
@@ -590,7 +623,12 @@ function executeTelemetryDecision(
   decision: TelemetryDecision,
   ctx: TelemetryContext,
 ) {
-  if (decision.capture) {
+  const sampledIn =
+    decision.sampleRate === undefined ||
+    decision.sampleRate >= 1 ||
+    Math.random() < decision.sampleRate;
+
+  if (decision.capture && sampledIn) {
     reporter.capture(error, {
       level: decision.level,
       fingerprint: decision.fingerprint,
@@ -617,6 +655,8 @@ function executeTelemetryDecision(
 Sentry, console, pager adapter는 delivery 책임만 가진다.
 
 Alert 판단은 adapter가 아니라 decision resolver가 끝낸다.
+
+Sampling은 resolver가 `sampleRate`를 결정하고 executor 또는 reporter wrapper가 실행한다. 둘 중 어디서 실행하든 contract test가 있어야 한다.
 
 ## Serialization Boundary
 
@@ -653,7 +693,7 @@ API response에 `surface`를 넣을지는 신중해야 한다. Web, Mobile, Admi
 | `TIMEOUT` | autocomplete | silent/toast, generic, retry | sampled warning |
 | `TIMEOUT` | `checkout.pay` | form/dialog, safe-vague, retry/wait | warning capture |
 | `RATE_LIMITED` | resend code | form, safe-vague, wait | info/warning breadcrumb |
-| `SCHEMA_MISMATCH` | product page query | page, generic, retry/contact | error capture |
+| `SCHEMA_MISMATCH` | product page query | page, support-only, contact-support | error/fatal capture |
 | `UNKNOWN_SERVER_ERROR` | checkout submit | form/page, support-only, contact-support | fatal capture, alert candidate |
 | `UNKNOWN_CLIENT_ERROR` | click handler | toast, generic, retry | error capture |
 
@@ -662,24 +702,49 @@ API response에 `surface`를 넣을지는 신중해야 한다. Web, Mobile, Admi
 초기 API는 다음 정도가 적당하다.
 
 ```ts
-defineOperation(name, meta);
+const decisionSystem = createDecisionSystem({
+  errors,
+  operations,
+  fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+  validationErrorCode: "VALIDATION", // 3-arg form action schema 실패 시 사용
+});
 
-defineFormAction(operation, schema, handler);
+decisionSystem.defineOperation(name, meta);
+
+defineFormAction(operation, handler);          // 2-arg
+defineFormAction(operation, schema, handler);  // 3-arg: schema.parse 후 handler 실행
 defineServerAction(operation, handler);
 defineQuery(operation, handler);
 defineBackgroundTask(operation, handler);
+defineRouteGuard(operation, handler);
 protectedPage(operation, handler);
+withRenderBoundary(operation, handler);
 
 ok(data);
-fail(code, details?, options?);
-appError(code, details?, options?);
+fail(code, details?, options?);            // free 함수: details 느슨
+appError(code, details?, options?);        // free 함수: details 느슨
+
+// catalog-typed: details가 code별 shape로 강제됨 (fail("INVALID_CREDENTIALS", {x}) -> 컴파일 에러)
+decisionSystem.fail(code, details?, options?);
+decisionSystem.appError(code, details?, options?);
 
 resolveErrorDecision(input);
-executeErrorDecision(error, decision, ctx);
+toClientErrorPayload(error, decision);
+executeTelemetryDecision(error, telemetry, ctx, sinks);
+executeErrorDecision(error, decision, ctx, sinks); // telemetry 실행 + decision.user 반환
 
-useErrorDecision(error, occurrence?);
-ErrorSurface;
+// React (peer dep)
+// "error-decision-system/react" — RSC-safe, hook 없음
+ErrorSurface;                  // slots / fieldErrors / target 지원
+// "error-decision-system/react-hooks" — "use client" 전용
+useFormAction(action);         // submit / isPending / errorDecision / fieldError
+useDecisionQuery(query, input); // data / errorDecision / isLoading / refetch
+DecisionSystemProvider;        // useErrorDecision에 system 주입
+useErrorDecision(error, occurrence); // raw error -> ErrorDecision (provider 필요)
+useDecisionRedirect(decision, navigate); // redirect surface일 때 navigate 실행
 ```
+
+> 구현 상태: 위 API는 `packages/error-decision-system`에 모두 구현되어 typecheck + 테스트(43개)로 보증된다. per-code details 타입 강제는 `decisionSystem.fail`/`decisionSystem.appError`(catalog-typed)에서 동작하며, free `fail`/`appError`는 확장용 느슨한 버전으로 남는다. redirect의 실제 navigation은 `useDecisionRedirect`가 `decision.user.target`(= `ErrorSemantics.redirectTarget`)으로 수행한다.
 
 대부분의 feature code는 아래 네 개만 쓰게 한다.
 
@@ -691,6 +756,27 @@ appError
 ```
 
 나머지는 framework, shared UI, platform layer가 사용한다.
+
+App layer에서는 catalog key를 보존해야 한다.
+
+```ts
+const operations = {
+  "checkout.pay": { ... },
+  "auth.login": { ... },
+} as const satisfies OperationCatalog;
+
+const decisionSystem = createDecisionSystem({
+  errors,
+  operations,
+  fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+});
+
+decisionSystem.defineFormAction("checkout.pay", async () => {});
+decisionSystem.defineFormAction("unknown.operation", async () => {});
+//                              ^ type error
+```
+
+Core library는 확장을 위해 string catalog를 받아야 하지만, app layer facade는 가능한 한 typed union으로 좁혀야 한다.
 
 ## Guardrails
 
@@ -717,6 +803,8 @@ feature code에서 raw vendor SDK import
 - typed wrapper만 export
 - raw vendor SDK를 feature code에서 import 금지
 - operation registry 누락 검사
+- disclosure별 message key 누락 검사
+- resolver code hardcoding 회귀 검사
 - decision matrix snapshot test
 
 ## 체크리스트
@@ -892,3 +980,36 @@ system:
 ```
 
 이 구조가 되면 에러 아키텍처는 단순한 예외 처리 유틸이 아니라, 제품 UX와 운영 안정성을 함께 다루는 유지보수 가능한 Error Decision System이 된다.
+
+## 업데이트 기록
+
+### 2026-06-01
+
+Claude 리뷰와 Codex 재리뷰를 반영했다.
+
+- 리뷰 기록 문서: `ERROR_DECISION_SYSTEM_REVIEW.md`를 추가했다.
+- disclosure가 message selection을 강제해야 한다는 원칙을 추가했다.
+- resolver가 특정 `error.code`를 하드코딩하지 않도록 semantics metadata에 decision hint를 둘 수 있게 문서화했다.
+- boundary helper precedence를 `call-site override > boundary defaults > operation registry default`로 명시했다.
+- operation catalog key를 app layer facade까지 typed union으로 전파해야 한다는 기준을 추가했다.
+- telemetry `sampleRate`는 결정만 하지 않고 executor/reporter contract로 실행되어야 한다고 명시했다.
+- guardrail 목록에 disclosure별 message key 검사와 resolver code hardcoding 회귀 검사를 추가했다.
+
+### 2026-06-01 (프로덕션 라이브러리 재스코어링 반영)
+
+7개 차원 적대적 재평가에서 확인된 구현 결함(발견사항 #2~#7)을 코드로 반영했다. 배포/패키징(#1)은 사내 packages 사용 전제로 범위에서 제외했다.
+
+- `defineFormAction`에 `(operation, schema, handler)` 3-arg 오버로드를 추가하고, schema parse 실패를 client-safe `fieldErrors` 기반 VALIDATION decision으로 변환한다(`validationErrorCode`).
+- `defineServerAction` / `defineRouteGuard` / `withRenderBoundary` / `executeErrorDecision`를 구현했다.
+- `ErrorSurface`에 `slots` / `fieldErrors` / `target`을 지원하고, `useFormAction` · `useDecisionQuery` hook을 추가했다. `useErrorDecision`은 로드맵으로 남겼다.
+- `OccurrenceContext.idempotent`를 resolver에 연결해 비-idempotent 재시도를 `wait` + confirm `dialog`로 다운그레이드한다(`dialog` surface 도달 가능).
+- `createDecisionSystem`이 init time에 disclosure별 messageKey 누락과 fallbackErrorCode 부재를 throw로 검증한다(disclosure를 권고에서 구조적 보장으로 승격).
+- 시나리오 매트릭스를 엔진 동작과 정합시키고(SCHEMA_MISMATCH → support-only, TIMEOUT form → safe-vague), matrix snapshot 테스트로 고정했다.
+- 테스트를 13개에서 38개로 확대했다(precedence·sampler·presenter·matrix·schema·idempotent·boundary·invariant).
+
+### 2026-06-02 (잔여 갭 처리)
+
+- **per-code details 타입**: `ErrorSemantics<Code, Details>`에 `validateDetails`를 type-guard로 두고 `DetailsOf<Errors, C>`로 추출, catalog-typed `decisionSystem.fail`/`appError`를 추가했다. 잘못된 details/미등록 code는 컴파일 타임에 막힌다(`@ts-expect-error` 테스트로 고정). free `fail`/`appError`는 확장용 느슨한 버전으로 유지한다.
+- **redirect navigation + useErrorDecision**: `ErrorSemantics.redirectTarget` + `resolveTarget`로 redirect surface의 target을 결정하고, `react-hooks`에 `DecisionSystemProvider`·`useErrorDecision`·`useDecisionRedirect`를 추가했다.
+- **fieldPath 병합 풋건**: `finalizeFailure`가 `appError`에 `occurrence`를 중복 전달하지 않게 해 fieldPath발 `uiScope:"field"`가 재병합에 덮이지 않도록 고쳤다.
+- 테스트를 43개로 확대했다.

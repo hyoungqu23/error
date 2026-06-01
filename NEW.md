@@ -915,7 +915,7 @@ API response에 `surface`를 넣을지는 신중해야 한다.
 | `TIMEOUT`              | autocomplete       | silent/toast, generic, retry             | sampled warning                |
 | `TIMEOUT`              | checkout payment   | form/dialog, safe-vague, retry/wait      | warning capture                |
 | `RATE_LIMITED`         | resend code        | form, safe-vague, wait                   | info/warning breadcrumb        |
-| `SCHEMA_MISMATCH`      | product page query | page, generic, retry/contact             | error capture                  |
+| `SCHEMA_MISMATCH`      | product page query | page, support-only, contact-support      | error/fatal capture            |
 | `UNKNOWN_SERVER_ERROR` | checkout submit    | form/page, support-only, contact-support | fatal capture, alert candidate |
 | `UNKNOWN_CLIENT_ERROR` | click handler      | toast, generic, retry                    | error capture                  |
 
@@ -1004,23 +1004,24 @@ Product page query succeeds
 -> response shape invalid
 -> SCHEMA_MISMATCH
 -> occurrence: query, uiScope page, criticality core
--> disclosure: generic
+-> disclosure: support-only (fault + core escalates past generic)
 -> surface: page
--> action: retry or contact-support
--> telemetry: error capture, breadcrumb, alert candidate if elevated
+-> action: contact-support
+-> telemetry: error/fatal capture, breadcrumb, server alert
 ```
 
 사용자 표현:
 
 ```txt
-페이지를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+페이지를 불러오지 못했습니다. 지원 코드와 함께 문의해주세요.
 ```
 
 운영 신호:
 
 ```txt
 capture true
-level error
+level error/fatal
+alert true (server)
 fingerprint product.read + SCHEMA_MISMATCH
 ```
 

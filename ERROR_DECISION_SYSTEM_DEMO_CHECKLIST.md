@@ -28,10 +28,16 @@
 ## DX Layer
 
 - [x] `defineOperation()`: `createDecisionSystem().defineOperation`
-- [x] `defineFormAction()`: `createDecisionSystem().defineFormAction`
+- [x] `defineFormAction()` (2-arg + 3-arg schema): `createDecisionSystem().defineFormAction`
+- [x] `defineServerAction()`: `createDecisionSystem().defineServerAction`
 - [x] `defineQuery()`: `createDecisionSystem().defineQuery`
 - [x] background boundary: `defineBackgroundTask()`
-- [x] route guard helper: `protectedPage()`
+- [x] route guard helper: `defineRouteGuard()` / `protectedPage()`
+- [x] render boundary helper: `withRenderBoundary()`
+- [x] `executeErrorDecision()` (telemetry 실행 + user decision 반환)
+- [x] catalog-typed `decisionSystem.fail()` / `appError()` (code별 details 타입 강제)
+- [x] React hooks: `useFormAction()`, `useDecisionQuery()`, `useErrorDecision()` + `DecisionSystemProvider`, `useDecisionRedirect()`
+- [x] hooks dogfood: Next `"use client"` LiveForm 아일랜드(RSC 경계) + Vite LiveForm (`useFormAction`/`useDecisionQuery`)
 - [x] 짧은 `fail(code, details?)`: `packages/error-decision-system/src/index.ts`
 - [x] 짧은 `appError(code, details?)`: `packages/error-decision-system/src/index.ts`
 - [x] 80% 케이스에서 occurrence 직접 작성 없음: `loginAction`, `checkoutAction`, `productQuery`
@@ -75,6 +81,13 @@
 - [x] telemetry executor does not reinterpret severity: executor test with `level: "fatal"` and `alert: false`
 - [x] serialization allowlist test: validation/payment details tests
 - [x] raw message leakage regression test: schema mismatch leakage test
+- [x] boundary precedence 구별 test: `invariants.test.ts` (boundary > operation, call-site > boundary)
+- [x] sampler 주입 계약 test: `invariants.test.ts` (sampleRate 실행 분기)
+- [x] registry invariant test: `invariants.test.ts` (messageKey 누락 / fallback 부재 throw)
+- [x] scenario matrix snapshot test: `invariants.test.ts`
+- [x] per-code details 타입 강제: `invariants.test.ts` (`@ts-expect-error` 3종, typecheck로 검증)
+- [x] fieldPath/occurrence 병합 precedence test: `invariants.test.ts`
+- [x] redirect target 결정 test: `invariants.test.ts`
 - [x] DX examples typecheck: `pnpm typecheck`
 
 ## Verification Commands
@@ -91,6 +104,6 @@ pnpm lint
 Observed results:
 
 - `pnpm typecheck`: 7 packages successful.
-- `pnpm test`: 4 test packages successful, including `error-decision-system` 12 tests.
-- `pnpm run build`: existing Next app, new Next app, and new Vite app built successfully.
+- `pnpm test`: 4 test packages successful, including `error-decision-system` 43 tests (13 scenario + 30 invariant/contract, incl. per-code details `@ts-expect-error` + redirect target).
+- `pnpm run build`: existing Next app, new Next app(+`"use client"` LiveForm 아일랜드), and new Vite app(+LiveForm) built successfully. Vite `MODULE_LEVEL_DIRECTIVE`(use client) 경고는 `vite.config.ts` onwarn으로 억제.
 - `pnpm lint`: no lint tasks configured in this repo.
