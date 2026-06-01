@@ -99,6 +99,21 @@ describe("safeFormAction — §10 mutation Result path", () => {
     expect(handleServerError).not.toHaveBeenCalled();
   });
 
+  it("duplicate FormData field names are preserved as arrays for Zod", async () => {
+    const tagsSchema = z.object({ tag: z.array(z.string()).min(2) });
+    const action = safeFormAction(tagsSchema, async (data) => ({ tags: data.tag }));
+    const form = new FormData();
+    form.append("tag", "alpha");
+    form.append("tag", "beta");
+
+    const result = await action(null, form);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected Success");
+    expect(result.data).toEqual({ tags: ["alpha", "beta"] });
+    expect(handleServerError).not.toHaveBeenCalled();
+  });
+
   it("action throwing an EXPECTED DomainError → Failure (returned, not thrown, not reported)", async () => {
     const expectedErr = makeError({ code: "NOT_FOUND", details: { resource: "secret-table" } });
     const action = safeFormAction(schema, async (_data: In) => {

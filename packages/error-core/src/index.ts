@@ -12,11 +12,13 @@ export {
   DomainError,
   isDomainError,
   isSerializedError,
+  isClientSerializedError,
   isExpectedCode,
   resolvePolicy,
   type AppError,
   type AppErrorOptions,
   type SerializedError,
+  type ClientSerializedError,
   type ResolvedPolicy,
   type ResolvedAppError,
 } from "./app-error";
@@ -39,7 +41,6 @@ export {
   toClientSerialized,
   gateClientDetails,
   DETAILS_ALLOWLIST,
-  type ClientSerializedError,
 } from "./serialize-client";
 
 // ── i18n / 메시지 해소 ──────────────────────────────────────────────────────

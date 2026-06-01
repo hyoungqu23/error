@@ -102,6 +102,45 @@ describe("§10 createHandleError side effects", () => {
     expect(ctx.runtime).toBe("server");
   });
 
+  it("isolates sink failures so error handling never throws back into the app", () => {
+    const reporter: Reporter = {
+      report: vi.fn(() => {
+        throw new Error("report failed");
+      }),
+      breadcrumb: vi.fn(() => {
+        throw new Error("breadcrumb failed");
+      }),
+      setUser: vi.fn(),
+      setContext: vi.fn(),
+    };
+    const presenter: Presenter = {
+      present: vi.fn(() => {
+        throw new Error("present failed");
+      }),
+    };
+    const throwingNotifier: Notifier = {
+      notify: vi.fn(() => {
+        throw new Error("notify failed");
+      }),
+    };
+    const deps: HandleErrorDeps = {
+      registry: DEFAULT_ERROR_REGISTRY,
+      reporter,
+      presenter,
+      notifier: throwingNotifier,
+    };
+    const handle = createHandleError(deps, BASE_CTX);
+
+    expect(() =>
+      inScope(() => handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }))),
+    ).not.toThrow();
+
+    expect(reporter.report).toHaveBeenCalledTimes(1);
+    expect(throwingNotifier.notify).toHaveBeenCalledTimes(1);
+    expect(presenter.present).toHaveBeenCalledTimes(1);
+    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
+  });
+
   it("options.log:'none' → reporter.report is NOT called (presenter/notifier/breadcrumb still fire)", () => {
     const { deps, reporter, presenter } = makeDeps(notifier);
     const handle = createHandleError(deps, BASE_CTX);

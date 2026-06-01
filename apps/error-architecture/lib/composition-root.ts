@@ -6,11 +6,11 @@
 //   - 클라이언트 deps : 아래 buildClientDeps()로 조립 — sonner presenter(토스트) +
 //                       guarded console reporter. (initHandleError로 1회 바인딩)
 //   - 서버 deps       : error-next/server의 serverDeps를 그대로 사용한다
-//                       (Sentry+console reporter, pager notifier, 요청별 correlationId).
-//                       기본 serverDeps는 모듈 로드 시 Sentry reporter를 eager 조립한다 —
-//                       Sentry.init()이 없으면 no-op이다(데모처럼 init 미설정 시 서버 보고는
-//                       조용히 비활성). 프로덕션에서는 instrumentation.ts에서 Sentry.init()을
-//                       먼저 호출하거나, serverDeps 대신 자체 deps로 교체한다:
+//                       (guarded console reporter, fatal-threshold pager notifier,
+//                       요청별 correlationId). 기본 serverDeps는 optional peer인 Sentry를
+//                       eager import하지 않는다. 프로덕션에서 Sentry를 쓰려면
+//                       instrumentation.ts에서 Sentry.init({ beforeSend })를 호출하고,
+//                       자체 deps로 reporter를 교체한다:
 //
 //                         import { createHandleError, createConsoleReporter,
 //                                  guardedCompositeReporter, noopNotifier } from "error-core";

@@ -12,7 +12,7 @@ import { buildClientDeps } from "@/lib/composition-root";
 export function ErrorInit({ correlationId }: { correlationId: string }) {
   useEffect(() => {
     initHandleError(buildClientDeps(), correlationId);
-    initBrowserBoundary();
+    return initBrowserBoundary();
   }, [correlationId]);
   return null;
 }

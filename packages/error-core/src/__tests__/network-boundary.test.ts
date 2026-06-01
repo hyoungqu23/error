@@ -9,6 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { networkBoundary } from "@/error/network-boundary";
 import { isDomainError, DomainError } from "@/error/app-error";
+import { makeError } from "@/error/make-error";
+import { toClientSerialized } from "@/error/serialize-client";
 import { z } from "zod";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -126,6 +128,37 @@ describe("networkBoundary — server SerializedError body", () => {
     const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
     expect(err.code).toBe("NOT_FOUND");
     expect(err.correlationId).toBe("srv-corr-123");
+  });
+
+  it("preserves a client-safe Route Handler DTO without a message field", async () => {
+    const dto = toClientSerialized(
+      makeError({ code: "FORBIDDEN", details: { requiredRole: "admin" } }),
+    );
+    expect("message" in dto).toBe(false);
+
+    stubFetchResolving(
+      jsonResponse(dto, { status: 403, headers: { "x-request-id": "req-forbidden-1" } }),
+    );
+
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    expect(err.code).toBe("FORBIDDEN");
+    expect(err.details).toBeNull();
+    expect(err.correlationId).toBe("req-forbidden-1");
+  });
+
+  it("rehydrates allowlisted VALIDATION details from a client-safe Route Handler DTO", async () => {
+    const dto = toClientSerialized(
+      makeError({
+        code: "VALIDATION",
+        details: { fieldErrors: { email: ["invalid"] } },
+      }),
+    );
+
+    stubFetchResolving(jsonResponse(dto, { status: 422 }));
+
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    expect(err.code).toBe("VALIDATION");
+    expect(err.details).toEqual({ fieldErrors: { email: ["invalid"] } });
   });
 });
 

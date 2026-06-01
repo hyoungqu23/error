@@ -1,0 +1,28 @@
+{
+  "name": "error-decision-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Production error decision system demo: inner decision engine plus DX facade.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.tsx",
+    "./demo": "./src/demo.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf .turbo node_modules"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.7",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

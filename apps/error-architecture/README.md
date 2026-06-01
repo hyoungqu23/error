@@ -16,7 +16,7 @@ pnpm --filter error-architecture-app build   # 프로덕션 빌드 (Turbopack)
 "어떤 어댑터를 쓸지" 결정하는 유일한 장소:
 
 - **클라이언트** — [`lib/composition-root.ts`](lib/composition-root.ts)의 `buildClientDeps()`가 sonner presenter + guarded console reporter를 조립. [`app/error-init.tsx`](app/error-init.tsx)가 `initHandleError`로 1회 바인딩 + `initBrowserBoundary`.
-- **서버** — `error-next/server`의 기본 `serverDeps`(Sentry+console reporter, pager notifier, 요청별 correlationId)를 사용.
+- **서버** — `error-next/server`의 기본 `serverDeps`(guarded console reporter, fatal-threshold pager notifier, 요청별 correlationId)를 사용. Sentry는 optional peer라 앱 컴포지션 루트에서 명시적으로 조립할 때만 로드한다.
 - **프로바이더** — [`app/providers.tsx`](app/providers.tsx)가 `QueryClientProvider`(`makeQueryClient`) + sonner `<Toaster />` + `ErrorInit`을 마운트.
 
 ## 라우트

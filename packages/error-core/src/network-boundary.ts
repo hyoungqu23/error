@@ -1,6 +1,11 @@
 // error/network-boundary.ts  — the Network 경계 (변환: raw transport → AppError). THROWING.
 import { z } from "zod";
-import { DomainError, isSerializedError, type SerializedError } from "./app-error";
+import {
+  DomainError,
+  isClientSerializedError,
+  isSerializedError,
+  type SerializedError,
+} from "./app-error";
 import { makeError } from "./make-error";
 import { parseRetryAfter } from "./retry-after";
 
@@ -107,6 +112,9 @@ export async function networkBoundary<T = unknown>(
     //     (FORBIDDEN / NOT_FOUND / VALIDATION / …). Makes §8.4's inline branch reachable.
     if (isSerializedError(body)) {
       throw DomainError.fromSerialized(body satisfies SerializedError); // already carries correlationId if server set it
+    }
+    if (isClientSerializedError(body)) {
+      throw withCorrelation(DomainError.fromClientSerialized(body), correlationId);
     }
 
     // (b) Opaque error response → map by status class. 429 carries Retry-After.

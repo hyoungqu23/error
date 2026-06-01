@@ -19,6 +19,18 @@ export interface SerializedError {
   readonly digest?: string; // Next.js RSC digest when available
 }
 
+/**
+ * Client-bound DTO produced by toClientSerialized(). It intentionally has no
+ * free-text message; copy is resolved from the registry's userMessageKey.
+ */
+export interface ClientSerializedError {
+  readonly code: ErrorCode;
+  readonly userMessageKey: string;
+  readonly correlationId?: string;
+  readonly digest?: string;
+  readonly details?: unknown;
+}
+
 export interface AppErrorOptions<C extends ErrorCode> {
   code: C;
   details: ErrorDetailsMap[C];
@@ -178,6 +190,31 @@ export class DomainError<C extends ErrorCode = ErrorCode> extends Error {
       digest: s.digest,
     });
   }
+
+  /**
+   * Rebuild from the public, client-safe wire DTO. Missing details are treated as
+   * null so nullable/null schemas round-trip while required schemas (VALIDATION)
+   * still fail closed when their allowlisted payload is absent or forged.
+   */
+  static fromClientSerialized(s: ClientSerializedError): DomainError {
+    const details = Object.prototype.hasOwnProperty.call(s, "details") ? s.details : null;
+    const parsed = ErrorDetailsSchema[s.code].safeParse(details);
+    if (!parsed.success) {
+      const fallback: ErrorCode =
+        getRuntime() === "server" ? "UNKNOWN_SERVER_ERROR" : "UNKNOWN_CLIENT_ERROR";
+      return construct(fallback, null, {
+        message: fallback,
+        cause: details,
+        correlationId: s.correlationId,
+        digest: s.digest,
+      });
+    }
+    return construct(s.code, parsed.data, {
+      message: s.code,
+      correlationId: s.correlationId,
+      digest: s.digest,
+    });
+  }
 }
 
 /**
@@ -207,6 +244,17 @@ export const isSerializedError = (e: unknown): e is SerializedError =>
   "message" in e &&
   typeof (e as SerializedError).code === "string" &&
   (e as SerializedError).code in getActiveErrorRegistry();
+
+/** Public client-safe DTO guard: code + userMessageKey, but intentionally no message. */
+export const isClientSerializedError = (e: unknown): e is ClientSerializedError =>
+  typeof e === "object" &&
+  e !== null &&
+  "code" in e &&
+  "userMessageKey" in e &&
+  !("message" in e) &&
+  typeof (e as ClientSerializedError).code === "string" &&
+  typeof (e as ClientSerializedError).userMessageKey === "string" &&
+  (e as ClientSerializedError).code in getActiveErrorRegistry();
 
 /**
  * Pure intent lookup off the *active* registry so a substituted catalog governs

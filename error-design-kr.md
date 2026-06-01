@@ -21,7 +21,9 @@
 >
 > **개정 r5 — kind enum, present(+inline/silent), impact(impact) breadcrumb(브레드크럼), 프로덕션 빈틈 수정; 구체화 및 재검증됨(tsc 0, vitest 324/0, 소스 파일 47개). expected:boolean -> kind; ux -> present; Reporter.breadcrumb 추가; DETAILS_ALLOWLIST를 스키마에 대해 타이핑; 실제 Sonner presenter; 배럴; /api/health; networkBoundary 아웃바운드 correlationId; ErrorFallback retry/focus/a11y. /tmp/error-core/src가 정본 컴파일 소스로 남는다.**
 >
-> **개정 r6 — 모노레포 분리(Turborepo + pnpm).** 단일 `src/core/error/` 트리를 의존성 방향에 따라 세 개의 워크스페이스 패키지로 분리하고, 이를 소비하는 Next.js 16 레퍼런스 앱을 추가했다: **`error-core`**(zod만 의존하는 isomorphic 커널 — 어휘 리프·레지스트리·모델·텔레메트리 계약·`createHandleError`·정규화·직렬화 누출 게이트·순수 재시도·`networkBoundary`·클라이언트 싱글턴 sink·순수 console/composite 어댑터), **`error-adapters`**(벤더 격리 — Sentry·sonner·pager; 벤더 SDK는 optional peerDependency), **`error-next`**(Next/React 통합 — 경계·요청별 컴포지션 루트·`useErrorHandler`·QueryClient·에러 바운더리 컴포넌트; 클라이언트 표면 `error-next`, 서버 전용 표면 `error-next/server`). 패키지는 빌드 단계 없이 `.ts` 소스를 그대로 `exports`로 내보내며(raw-TS 내부 패키지), 앱이 `transpilePackages`로 트랜스파일한다. **설계 자체는 변하지 않았다 — 8계층 단방향 의존성과 "벤더를 아는 파일은 하나"라는 DI 격리 원칙을 *물리적 패키지 경계*로 만든 것이다.** 검증 보존: 커널/어댑터/통합은 검증된 baseline(zod3·@sentry8·sonner1·TanStack5·vitest2·next15.1.4 dev)을 유지해 324개 테스트(core 277·adapters 11·next 36)가 그대로 통과하고, **앱만** Next 16.2 + React 19.2로 `next build`(Turbopack)된다. 정본 소스는 이제 `packages/{error-core,error-adapters,error-next}/src` + `apps/error-architecture`다. 모노레포 상세는 §12.6.
+> **개정 r6 — 모노레포 분리(Turborepo + pnpm).** 단일 `src/core/error/` 트리를 의존성 방향에 따라 세 개의 워크스페이스 패키지로 분리하고, 이를 소비하는 Next.js 16 레퍼런스 앱을 추가했다: **`error-core`**(zod만 의존하는 isomorphic 커널 — 어휘 리프·레지스트리·모델·텔레메트리 계약·`createHandleError`·정규화·직렬화 누출 게이트·순수 재시도·`networkBoundary`·클라이언트 싱글턴 sink·순수 console/composite 어댑터), **`error-adapters`**(벤더 격리 — Sentry·sonner·pager; 벤더 SDK는 optional peerDependency), **`error-next`**(Next/React 통합 — 경계·요청별 컴포지션 루트·`useErrorHandler`·QueryClient·에러 바운더리 컴포넌트; 클라이언트 표면 `error-next`, 서버 전용 표면 `error-next/server`). 패키지는 빌드 단계 없이 `.ts` 소스를 그대로 `exports`로 내보내며(raw-TS 내부 패키지), 앱이 `transpilePackages`로 트랜스파일한다. **설계 자체는 변하지 않았다 — 8계층 단방향 의존성과 "벤더를 아는 파일은 하나"라는 DI 격리 원칙을 *물리적 패키지 경계*로 만든 것이다.** 검증 보존: 커널/어댑터/통합은 검증된 baseline(zod3·@sentry8·sonner1·TanStack5·vitest2·next15.1.4 dev)을 유지해 테스트가 통과하고, **앱만** Next 16.2 + React 19.2로 `next build`(Turbopack)된다. 정본 소스는 이제 `packages/{error-core,error-adapters,error-next}/src` + `apps/error-architecture`다. 모노레포 상세는 §12.6.
+>
+> **개정 r7 — 프로덕션화 보강.** Route Handler의 public `ClientSerializedError`(message 없음)를 `networkBoundary`가 일급으로 재수화하도록 `DomainError.fromClientSerialized`/`isClientSerializedError`를 추가했다. 서버 기본 `serverDeps`는 optional peer인 Sentry를 eager import하지 않고 guarded console reporter만 기본 제공하며, pager는 `policyGatedNotifier(thresholdAlertPolicy({ threshold:"fatal" }))`로 실제 게이트된다. `handleError`는 주입된 sink throw를 최후 방어선에서 격리한다. 브라우저 경계는 전역 핸들러 덮어쓰기 대신 `addEventListener`+cleanup을 사용하고, `safeFormAction`은 중복 FormData 키를 배열로 보존한다. 현재 검증: `tsc --noEmit` 0, `vitest` 329/0(core 280 · adapters 12 · next 37), 앱 `next build` 통과.
 
 ---
 ## 1. 설계 목표 및 원칙
@@ -31,7 +33,7 @@
 1. **하나의 처리 경로, 여러 전달 트랙.** 모든 에러 — 서버, 네트워크, 렌더, 이벤트 핸들러, 처리되지 않은 거부(unhandled rejection) — 는 단일 `handleError`(클라이언트) / `handleServerError`(서버)로 수렴한다. 전달은 분기하지만(Return vs Throw), *처리는 분기하지 않는다*. 이는 이 시리즈의 핵심 약속이며, 나는 이를 그대로 유지한다.
 2. **정책은 데이터, 메커니즘은 코드.** `ERROR_REGISTRY`는 코드별 정책(`kind`, `present`, `log`, 그리고 아래의 추가 항목들)을 보유한다. `handleError`만이 이를 읽는 유일한 주체다. 어떤 코드의 동작을 바꾸는 것 = 레지스트리의 한 행을 편집하는 것. `kind`는 세 가지 분류(`"business" | "operational" | "fault"`)이며, `present`는 사용자 대면 전달을 명명한다(`"toast" | "alert" | "inline" | "silent"`).
 3. **모든 것은 주입(DI)되며, 기능 코드에는 어떤 것도 하드와이어되지 않는다.** 어떤 기능 파일도 `@sentry/*`를 import하지 않는다. 벤더 SDK는 컴포지션 루트에서 한 번 배선되는 어댑터 내부에만 존재한다. 레지스트리 자체도 마찬가지다 — 주입되므로, 호스트 앱이나 테스트가 자신만의 카탈로그로 대체할 수 있다.
-4. **구성에 의한 직렬화 안전.** RSC/네트워크 경계를 넘어가는 것은 평범한 `SerializedError` JSON 객체뿐이다. 클래스 인스턴스는 결코 이동하지 않는다. *(r3: 직렬화기는 이제 누출 방지 강제 지점이기도 하다 — §5 `toClientSerialized` 참조.)*
+4. **구성에 의한 직렬화 안전.** RSC/네트워크 경계를 넘어가는 것은 평범한 JSON DTO뿐이다: 내부/서버 로그용 `SerializedError`와 클라이언트용 `ClientSerializedError`. 클래스 인스턴스는 결코 이동하지 않는다. *(r3/r7: 직렬화기는 이제 누출 방지 강제 지점이며, public DTO도 재수화된다 — §5 `toClientSerialized` 참조.)*
 5. **HTTP 시맨틱은 일급(first-class)이다.** 401/403/404는 Next의 전용 제어 흐름(프레임워크 인터럽트)을 사용하고, 500은 throw된 예외 경로다. 레지스트리는 코드 → 상태를 매핑하여 서버 경계와 Route Handler가 일관성을 유지하도록 한다.
 6. **관측 가능성은 상관(correlate)된다.** correlation ID는 **프록시 경계(Node 런타임)**에서 생성되어 서버→클라이언트로 전파되고, 모든 Sentry 이벤트와 모든 서버 로그 라인에 부착된다.
 
@@ -313,6 +315,15 @@ export interface SerializedError {
   readonly digest?: string; // 가능할 때의 Next.js RSC digest
 }
 
+/** 클라이언트로 향하는 public DTO. 자유 텍스트 message가 없다. */
+export interface ClientSerializedError {
+  readonly code: ErrorCode;
+  readonly userMessageKey: string;
+  readonly correlationId?: string;
+  readonly digest?: string;
+  readonly details?: unknown;
+}
+
 export interface AppErrorOptions<C extends ErrorCode> {
   code: C;
   details: ErrorDetailsMap[C];
@@ -472,6 +483,26 @@ export class DomainError<C extends ErrorCode = ErrorCode> extends Error {
       digest: s.digest,
     });
   }
+
+  static fromClientSerialized(s: ClientSerializedError): DomainError {
+    const details = Object.prototype.hasOwnProperty.call(s, "details") ? s.details : null;
+    const parsed = ErrorDetailsSchema[s.code].safeParse(details);
+    if (!parsed.success) {
+      const fallback: ErrorCode =
+        getRuntime() === "server" ? "UNKNOWN_SERVER_ERROR" : "UNKNOWN_CLIENT_ERROR";
+      return construct(fallback, null, {
+        message: fallback,
+        cause: details,
+        correlationId: s.correlationId,
+        digest: s.digest,
+      });
+    }
+    return construct(s.code, parsed.data, {
+      message: s.code,
+      correlationId: s.correlationId,
+      digest: s.digest,
+    });
+  }
 }
 
 /**
@@ -501,6 +532,16 @@ export const isSerializedError = (e: unknown): e is SerializedError =>
   "message" in e &&
   typeof (e as SerializedError).code === "string" &&
   (e as SerializedError).code in getActiveErrorRegistry();
+
+export const isClientSerializedError = (e: unknown): e is ClientSerializedError =>
+  typeof e === "object" &&
+  e !== null &&
+  "code" in e &&
+  "userMessageKey" in e &&
+  !("message" in e) &&
+  typeof (e as ClientSerializedError).code === "string" &&
+  typeof (e as ClientSerializedError).userMessageKey === "string" &&
+  (e as ClientSerializedError).code in getActiveErrorRegistry();
 
 /**
  * *활성(active)* 레지스트리에서의 순수 의도 조회로, 대체된 카탈로그가
@@ -1708,6 +1749,14 @@ export interface HandleErrorOptions {
   ctx?: Partial<TelemetryContext>;
 }
 
+const guardSink = (fn: () => void): void => {
+  try {
+    fn();
+  } catch {
+    // 에러 처리가 다시 앱의 에러 원인이 되어서는 안 된다.
+  }
+};
+
 export const createHandleError =
   (deps: HandleErrorDeps, baseCtx: TelemetryContext) =>
   (input: unknown, options: HandleErrorOptions = {}): ResolvedAppError => {
@@ -1726,16 +1775,17 @@ export const createHandleError =
     const ctx: TelemetryContext = { ...baseCtx, ...options.ctx };
 
     // 1. Sentry / console — 로그 정책이 요구할 때만.
-    if (log !== "none") deps.reporter.report(error, log, ctx);
+    if (log !== "none") guardSink(() => deps.reporter.report(error, log, ctx));
     // 2. 알림 게이트 (임계값 미만에서는 no-op).
-    deps.notifier.notify(error, severity, ctx);
+    guardSink(() => deps.notifier.notify(error, severity, ctx));
     // 3. Presenter가 처리 가능한 표면에 대해서만 PRESENTER. "redirect"/"page"는
     //    Presenter가 아니라 클라이언트 useErrorHandler가 에스컬레이션한다; "inline"/"silent"는
     //    여기서 아무것도 하지 않는다. "toast"/"alert"만 present()에 도달한다.
-    if (present === "toast" || present === "alert") deps.presenter.present(error, present, ctx);
+    if (present === "toast" || present === "alert")
+      guardSink(() => deps.presenter.present(error, present, ctx));
     // 4. T1 영향 BREADCRUMB: 재캡처 없이 사용자에게 보이는 영향을 기록하며,
     //    ctx.correlationId로 키가 매겨지고, log와 무관하다. 진정으로 silent일 때만 건너뛴다.
-    if (present !== "silent") deps.reporter.breadcrumb(error, present, ctx);
+    if (present !== "silent") guardSink(() => deps.reporter.breadcrumb(error, present, ctx));
 
     // 핵심: 호출자는 result.policy를 기준으로 컨텍스트 특화 UI("page" 에스컬레이션 포함)를 구동한다.
     return { error, code: error.code, policy: { ...base, severity, present, log } };
@@ -1774,7 +1824,7 @@ export const serverPresenter: PresenterIface = { present() {} };
 // error/build-deps.ts  (컴포지션 루트 — 두 런타임의 배선을 보여준다)
 import { DEFAULT_ERROR_REGISTRY } from "./registry";
 import type { HandleErrorDeps } from "./types";
-import { guardedCompositeReporter, createSentryReporter, createConsoleReporter } from "./adapters/composite-imports";
+import { guardedCompositeReporter, createConsoleReporter } from "./adapters/composite-imports";
 import { createSonnerPresenter, serverPresenter } from "./adapters/presenter";
 import { noopNotifier, policyGatedNotifier } from "./notifier";
 import { thresholdAlertPolicy } from "./alert-policy";
@@ -1795,7 +1845,6 @@ export const buildServerDeps = (): HandleErrorDeps => {
   return {
     registry: DEFAULT_ERROR_REGISTRY,
     reporter: guardedCompositeReporter([
-      { label: "sentry", reporter: createSentryReporter() },
       { label: "console", reporter: createConsoleReporter() },
     ]),
     presenter: serverPresenter,
@@ -1807,7 +1856,7 @@ export const buildServerDeps = (): HandleErrorDeps => {
  *  대신 서버에 상관된 이벤트를 기준으로 호출(page)한다. noopNotifier가 싱크를 선택적으로 유지한다. */
 export const buildClientDeps = (): HandleErrorDeps => ({
   registry: DEFAULT_ERROR_REGISTRY,
-  reporter: createSentryReporter(),
+  reporter: guardedCompositeReporter([{ label: "console", reporter: createConsoleReporter() }]),
   presenter: createSonnerPresenter(),
   notifier: noopNotifier,
 });
@@ -2293,25 +2342,33 @@ import type { ResolvedAppError } from "./app-error";
 import type { HandleErrorDeps } from "./types";
 import type { Presenter } from "./telemetry";
 import type { TelemetryContext } from "./telemetry";
-import type { Notifier } from "./notifier";
+import {
+  noopNotifier,
+  policyGatedNotifier,
+  thresholdAlertPolicy,
+  type Notifier,
+} from "./notifier";
 import { DEFAULT_ERROR_REGISTRY } from "./registry";
 import { guardedCompositeReporter, type GuardedCompositeReporter } from "./adapters/composite";
-import { createSentryReporter } from "./adapters/sentry-reporter";
 import { createConsoleReporter } from "./adapters/console-reporter";
 import { createPagerNotifier, webhookPagerTransport } from "./adapters/pager-notifier";
-import { noopNotifier } from "./notifier";
 
 /** 서버 presenter는 no-op이다: DOM이 없다. 모든 서버 handleError 호출은 present:"silent"를 전달한다. */
 const serverPresenter: Presenter = { present() {} };
 
 /**
- * 서버 알림 싱크를 빌드한다. 페이징은 서버 런타임에 속하며 pager 어댑터가 소유하는
- * AlertPolicy 임계값에 의해 게이트된다. webhook이 설정되지 않은 경우
+ * 서버 알림 싱크를 빌드한다. 페이징은 서버 런타임에 속하며 공유 AlertPolicy에 의해 게이트된다.
+ * webhook이 설정되지 않은 경우
  * (테스트 / 로컬 / 프리뷰), handleError가 결코 알림을 보내지 않도록 no-op notifier로 폴백한다.
  */
 const buildServerNotifier = (): Notifier => {
   const url = process.env.PAGER_WEBHOOK_URL;
-  return url ? createPagerNotifier(webhookPagerTransport(url)) : noopNotifier;
+  return url
+    ? policyGatedNotifier(
+        thresholdAlertPolicy({ threshold: "fatal", suppressRuntimes: ["client"] }),
+        createPagerNotifier(webhookPagerTransport(url)),
+      )
+    : noopNotifier;
 };
 
 /**
@@ -2322,7 +2379,6 @@ const buildServerNotifier = (): Notifier => {
  * 임계값을 넘어서는 health().failures가 바로 /health GET이 503으로 바꾸는 것이다.
  */
 export const serverReporter: GuardedCompositeReporter = guardedCompositeReporter([
-  { label: "sentry", reporter: createSentryReporter() },
   { label: "console", reporter: createConsoleReporter() },
 ]);
 
@@ -2437,7 +2493,7 @@ export const rethrowControlFlow = (e: unknown): void => {
 };
 ```
 
-**`safeFormAction` — 폼 뮤테이션 경계.** `safeServerAction`은 명령형으로 `await` 하는 RPC 모양의 호출(`(typedArgs) => Promise<Result<R>>`)을 감싼다. React의 `useActionState`는 자신의 액션을 `(prevState, payload) => newState`로 호출하며, 점진적으로 향상된 `<form action>`의 경우 payload는 원시 `FormData`다. 두 시그니처는 합성되지 않으므로, r3는 형제 어댑터를 추가한다 — 한 번, 그리고 올바르게 작성된다. r5는 payload를 `Object.fromEntries(formData)`로 파싱하고(Zod가 강제 변환을 소유한다) 예기치 못한 경로를 `present:"silent"`로 report 한다.
+**`safeFormAction` — 폼 뮤테이션 경계.** `safeServerAction`은 명령형으로 `await` 하는 RPC 모양의 호출(`(typedArgs) => Promise<Result<R>>`)을 감싼다. React의 `useActionState`는 자신의 액션을 `(prevState, payload) => newState`로 호출하며, 점진적으로 향상된 `<form action>`의 경우 payload는 원시 `FormData`다. 두 시그니처는 합성되지 않으므로, r3는 형제 어댑터를 추가한다 — 한 번, 그리고 올바르게 작성된다. r7는 payload를 중복 키 보존 plain object로 변환한다(같은 name의 checkbox/multiselect/File은 배열로 유지되고, Zod가 강제 변환을 소유한다). 예기치 못한 경로는 `present:"silent"`로 report 한다.
 
 ```ts
 // error/safe-form-action.ts  — 폼 뮤테이션 경계, useActionState 호환.
@@ -2464,8 +2520,8 @@ export const safeFormAction =
   async (prevState: FormState<R>, formData: FormData): Promise<Result<R>> => {
     let parsed: z.SafeParseReturnType<unknown, z.infer<S>>;
     try {
-      // Object.fromEntries는 FormData를 plain object로 축약한다; Zod가 강제 변환을 소유한다.
-      parsed = schema.safeParse(Object.fromEntries(formData));
+      // 중복 field name은 배열로 보존한다; Zod가 강제 변환을 소유한다.
+      parsed = schema.safeParse(formDataToObject(formData));
     } catch (error) {
       // safeParse는 결코 throw 하지 않는다; 여기서의 throw는 프로그래머/런타임 fault → 예기치 못한 경로.
       rethrowControlFlow(error);
@@ -2629,21 +2685,25 @@ export function raise(error: DomainError): never {
 
 ### 7.4 Route Handlers
 
-래퍼가 `httpStatus`를 통해 어떤 `AppError`든 올바른 HTTP 상태로 매핑하며 correlation ID 를 부착한다. **r3:** 본문은 `toClientSerialized`(§5.2)다 — 메시지 없음, 세부정보 게이팅 — 따라서 Route Handler 오류 응답은 내부 `message`/`details`를 호출자에게 결코 누출하지 않는다.
+래퍼가 `httpStatus`를 통해 어떤 `AppError`든 올바른 HTTP 상태로 매핑하며 correlation ID 를 부착한다. **r7:** 본문은 `toClientSerialized`(§5.2)다 — 메시지 없음, 세부정보 게이팅 — 이 public DTO는 `networkBoundary`가 다시 `DomainError`로 재수화한다. 따라서 Route Handler 오류 응답은 내부 `message`/`details`를 호출자에게 누출하지 않으면서도 원래 `code`를 보존한다.
 
 ```ts
 // error/route-handler.ts
 // `httpStatus`를 통해 어떤 AppError 든 올바른 HTTP 상태로 매핑하며 correlation
 // ID 를 부착한다. 본문은 `toClientSerialized`(§5.2)다 — 메시지 없음, 세부정보 게이팅 — 따라서 Route
 // Handler 오류 응답은 내부 `message`/`details`를 호출자에게 결코 누출하지 않는다.
-import { isDomainError } from "./app-error";
+import { DomainError, isDomainError } from "./app-error";
 import { makeError } from "./make-error";
 import { toClientSerialized } from "./serialize-client";
 
 export const toErrorResponse = (e: unknown, correlationId: string): Response => {
-  const err = isDomainError(e)
+  const base = isDomainError(e)
     ? e
-    : makeError({ code: "UNKNOWN_SERVER_ERROR", details: null, cause: e });
+    : makeError({ code: "UNKNOWN_SERVER_ERROR", details: null, cause: e, correlationId });
+  const err =
+    base.correlationId === undefined
+      ? DomainError.fromSerialized({ ...base.toSerialized(), correlationId })
+      : base;
   return Response.json(toClientSerialized(err), {
     status: err.httpStatus,
     headers: { "x-request-id": correlationId },
@@ -2653,7 +2713,7 @@ export const toErrorResponse = (e: unknown, correlationId: string): Response => 
 
 ### 7.5 `/health` 프로브 — dead-man-switch(데드맨 스위치) 에스컬레이션 (G10)
 
-컴포지트 reporter 는 **가드된다**(`adapters/composite.ts`): 싱크 실패를 삼켜서 텔레메트리가 결코 앱으로 throw 하지 않게 한다. 그 안전성에는 대가가 있다 — 조용히 망가진 Sentry 또는 console 싱크는 그렇지 않으면 보이지 않는다. `/health` 라우트가 이를 표면화한다. 이 라우트는 `serverReporter.health()`(`serverDeps.reporter`를 뒷받침하는 동일한 가드된 컴포지트로, `request-handler.server.ts`에서 재export 됨)를 읽고, 싱크별로 삼켜진 실패 카운트를 합산하며, **합계가 임계값을 넘어서면 503을 반환**하여 외부 가동시간 모니터의 5xx 알림이 온콜을 페이지하게 한다. 그 503-더하기-외부-모니터가 배선된 에스컬레이션이다. 인프로세스 대안(삼키는 지점에서 `serverDeps.notifier.notify(...)`를 호출하는 것)은 의도적으로 제외되었는데, `notify()`는 `DomainError` + 심각도 + `TelemetryContext`를 필요로 하지만 싱크가 삼키는 지점에는 그중 어느 것도 존재하지 않기 때문이다.
+컴포지트 reporter 는 **가드된다**(`adapters/composite.ts`): 싱크 실패를 삼켜서 텔레메트리가 결코 앱으로 throw 하지 않게 한다. 그 안전성에는 대가가 있다 — 조용히 망가진 console 싱크나 앱이 명시적으로 조립한 Sentry 싱크는 그렇지 않으면 보이지 않는다. `/health` 라우트가 이를 표면화한다. 이 라우트는 `serverReporter.health()`(`serverDeps.reporter`를 뒷받침하는 동일한 가드된 컴포지트로, `request-handler.server.ts`에서 재export 됨)를 읽고, 싱크별로 삼켜진 실패 카운트를 합산하며, **합계가 임계값을 넘어서면 503을 반환**하여 외부 가동시간 모니터의 5xx 알림이 온콜을 페이지하게 한다. 그 503-더하기-외부-모니터가 배선된 에스컬레이션이다. 인프로세스 대안(삼키는 지점에서 `serverDeps.notifier.notify(...)`를 호출하는 것)은 의도적으로 제외되었는데, `notify()`는 `DomainError` + 심각도 + `TelemetryContext`를 필요로 하지만 싱크가 삼키는 지점에는 그중 어느 것도 존재하지 않기 때문이다.
 
 ```ts
 // app/api/health/route.ts  — G10 라이브니스/텔레메트리 헬스 프로브 (라우트별 서버 전용).
@@ -2848,7 +2908,7 @@ export const safeHandler =
 
 ### 8.3 전역 window 캡처 (브라우저 경계 — final safety net)
 
-브라우저 경계는 Sentry 폭주 스로틀(§5.3)이 작동하도록 자신의 라우트를 반드시 태그해야 한다 — `window.onerror`/`onunhandledrejection`은 렌더 루프에서 초당 수백 번 발화할 수 있다.
+브라우저 경계는 Sentry 폭주 스로틀(§5.3)이 작동하도록 자신의 라우트를 반드시 태그해야 한다 — `window.onerror`/`onunhandledrejection`은 렌더 루프에서 초당 수백 번 발화할 수 있다. r7부터는 전역 핸들러 슬롯을 덮어쓰지 않고 `addEventListener`를 사용하며 cleanup 함수를 반환한다.
 
 ```ts
 // error/browser-boundary.ts — 브라우저 경계 (final safety net) (§8.3)
@@ -2857,20 +2917,31 @@ export const safeHandler =
 // ============================================================================
 import { handleError } from "./handler";
 
-export const initBrowserBoundary = (): void => {
-  if (typeof window === "undefined") return;
-  window.onerror = (_m, _s, _l, _c, error) =>
-    void handleError(error ?? new Error("Unhandled (window.onerror)"), {
+export const initBrowserBoundary = (): (() => void) => {
+  if (typeof window === "undefined") return () => {};
+
+  const onError = (event: ErrorEvent): void => {
+    void handleError(event.error ?? new Error("Unhandled (window.onerror)"), {
       present: "toast",
       log: "error",
       ctx: { route: "window.onerror" },
     });
-  window.onunhandledrejection = (ev: PromiseRejectionEvent) =>
-    void handleError(ev.reason ?? new Error("Unhandled rejection"), {
+  };
+  const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    void handleError(event.reason ?? new Error("Unhandled rejection"), {
       present: "toast",
       log: "error",
       ctx: { route: "window.onunhandledrejection" },
     });
+  };
+
+  window.addEventListener("error", onError);
+  window.addEventListener("unhandledrejection", onUnhandledRejection);
+
+  return () => {
+    window.removeEventListener("error", onError);
+    window.removeEventListener("unhandledrejection", onUnhandledRejection);
+  };
 };
 ```
 
@@ -2997,14 +3068,19 @@ UI 계층은 항상 **정규화된 `AppError`** / `ResolvedAppError.policy`를 �
 
 `networkBoundary`는 여섯 경계 중 다섯 번째이며, 원시 전송 결과(raw transport outcome)가 `DomainError`로 변하는 단일 지점이다. 이것은 *처리*(handle) 경계가 아니라 *변환*(transform) 경계다. 충실한 `DomainError`를 throw할 뿐 `handleError`를 절대 호출하지 않는다 — 보고는 정확히 한 번, 하류에서 throw가 소비되는 지점(쿼리 컨슈머 또는 `error.tsx`, 이들은 이후 `log:"none"`을 전달한다)에서 일어난다. 이것은 `OFFLINE`, `TIMEOUT`, `REQUEST_ABORTED`, `HTTP_CLIENT_ERROR`, `HTTP_SERVER_ERROR`, `RATE_LIMITED`, `SCHEMA_MISMATCH`, `NETWORK_ERROR`의 **유일한 생산자**다.
 
-핵심을 떠받치는 규칙은 **non-ok 순서**다. `!res.ok`일 때 본문을 한 번 읽고 *먼저* `isSerializedError(await res.json())` → `DomainError.fromSerialized`를 시도하여, 서버가 선택한 코드가 무엇이든 보존한다(서버가 발행한 `FORBIDDEN`/`NOT_FOUND`가 온전히 도착한다 — 이것이 §8.4의 inline 분기를 쿼리에서 도달 가능하게 만드는 요소다). 본문이 우리의 와이어 계약(wire contract)이 아닐 때에 한해서만 상태 클래스(status-class) 매핑으로 후퇴한다. 취소는 `AbortSignal.any`로 합성되며, TIMEOUT 대 REQUEST_ABORTED는 **어떤 하부 시그널이 abort되었는가**로 구별한다(throw된 `AbortError`의 name으로 구별하지 않는다 — 합성 시그널은 그 name을 신뢰성 있게 전달하지 않는다). `429`는 파싱된 `Retry-After`를 동반한다(§8.6).
+핵심을 떠받치는 규칙은 **non-ok 순서**다. `!res.ok`일 때 본문을 한 번 읽고 *먼저* 내부 `SerializedError`(`message` 있음)를 보존하고, 그 다음 public `ClientSerializedError`(`message` 없음, `userMessageKey` 있음)를 `DomainError.fromClientSerialized`로 재수화한다. 이 때문에 Route Handler가 `toClientSerialized`를 응답 body로 써도 서버가 선택한 `FORBIDDEN`/`NOT_FOUND`/`VALIDATION` 코드가 온전히 도착한다. 본문이 우리의 와이어 계약(wire contract)이 아닐 때에 한해서만 상태 클래스(status-class) 매핑으로 후퇴한다. 취소는 `AbortSignal.any`로 합성되며, TIMEOUT 대 REQUEST_ABORTED는 **어떤 하부 시그널이 abort되었는가**로 구별한다(throw된 `AbortError`의 name으로 구별하지 않는다 — 합성 시그널은 그 name을 신뢰성 있게 전달하지 않는다). `429`는 파싱된 `Retry-After`를 동반한다(§8.6).
 
 correlation은 이제 **양방향**이다(갭 수정 G8). r4에서 이 경계는 응답에서 서버의 `x-request-id`를 *끌어올리기만* 하여, 클라이언트 측 `DomainError`가 이미 발행된 서버 트레이스에 합류할 수 있게 했다. r5는 추가로 페이지 correlationId를 *아웃바운드로* **전송**한다. fetch 이전에 이 경계는 `proxy.ts`가 심어 둔 non-httpOnly `x-correlation-id` 쿠키를 읽어 요청의 `x-request-id` 헤더에 찍는다(드물게 호출자가 직접 공급한 `x-request-id`는 여전히 우선한다). 라우트 핸들러는 이 잘 형성된(well-formed) 인바운드 id를 새로 발행하는 대신 존중하므로, 클라이언트 요청과 서버 트레이스는 사후에 꿰매어 붙인 두 개의 id가 아니라 **end-to-end로 하나의 id**를 공유한다. 이 id는 사용 전 `^[\w-]{8,64}$`에 대해 검증되며, 아웃바운드 찍기는 서버에서는 no-op이다(`document`가 없음) — 서버에서는 바인딩된 활성 값이 이미 `await headers()`를 통해 함께 실려 가고, 응답 헤더 끌어올리기가 폴백으로 남는다.
 
 ```ts
 // error/network-boundary.ts  — the Network 경계 (변환: raw transport → AppError). THROWING.
 import { z } from "zod";
-import { DomainError, isSerializedError, type SerializedError } from "./app-error";
+import {
+  DomainError,
+  isClientSerializedError,
+  isSerializedError,
+  type SerializedError,
+} from "./app-error";
 import { makeError } from "./make-error";
 import { parseRetryAfter } from "./retry-after";
 
@@ -3111,6 +3187,9 @@ export async function networkBoundary<T = unknown>(
     //     (FORBIDDEN / NOT_FOUND / VALIDATION / …). §8.4의 inline 분기를 도달 가능하게 만든다.
     if (isSerializedError(body)) {
       throw DomainError.fromSerialized(body satisfies SerializedError); // 서버가 설정했다면 이미 correlationId를 가지고 있다
+    }
+    if (isClientSerializedError(body)) {
+      throw withCorrelation(DomainError.fromClientSerialized(body), correlationId);
     }
 
     // (b) 불투명한 에러 응답 → 상태 클래스로 매핑한다. 429는 Retry-After를 동반한다.
@@ -3479,7 +3558,7 @@ export async function getCorrelationId(): Promise<string> {
 | **Correlation ID(프록시)** | 인바운드가 존재하면 준수하고, 아니면 새로 발급한다; 인바운드로 전달됨(`headers()`를 통해 읽을 수 있음), 응답 헤더 + non-httpOnly 쿠키에 에코됨; `runtime`은 결코 `"edge"`가 아니다 | `NextResponse.next({request:{headers}})`가 id를 운반함을 단언하는 `proxy` 유닛 테스트; E2E `/api` 라우트가 `x-request-id`를 왕복한다. |
 | **E2E(Playwright)** | 401→로그인 리다이렉트, 403→forbidden 페이지, 404→not-found, 강제된 500→`digest` 참조를 가진 `error.tsx`; `retry`가 복구한다; 429→retry가 Retry-After를 준수한다 | 실제 내비게이션; 각 상태를 강제하기 위해 네트워크를 인터셉트한다. |
 
-DI는 이 모든 것을 자명하게 만든다: 테스트는 페이크로부터 `HandleErrorDeps`를 구성한다 — **유닛 테스트에서는 어떤 벤더 SDK도 결코 로드되지 않는다**, 이것이 그 추상화에 대한 가장 강력한 논거이다. 현 상태의 스위트는 **17개 테스트 파일 / 324개 테스트, 0개 실패**이다(`tsc` 클린).
+DI는 이 모든 것을 자명하게 만든다: core/next 테스트는 페이크로부터 `HandleErrorDeps`를 구성하고 벤더 SDK를 로드하지 않는다. 벤더 어댑터 테스트는 해당 어댑터 경계만 검증한다. 현 상태의 스위트는 **18개 테스트 파일 / 329개 테스트, 0개 실패**이다(`tsc` 클린).
 
 ### 10.1 재수화(rehydration) 왕복(정체성의 실행 가능한 증명)
 
@@ -4048,7 +4127,7 @@ describe("§10.3 i18n fallback completeness (CI guard)", () => {
 ### 12.1 검증
 
 - `turbo run typecheck` → 3개 패키지 `tsc --noEmit` 모두 exit 0 (플래그: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `moduleResolution: bundler`, `jsx: react-jsx`).
-- `turbo run test` → 17개 테스트 파일, **324개 테스트, 0개 실패** — 패키지별 분포: `error-core` 277 / `error-adapters` 11 / `error-next` 36 (§10 스위트에서 Playwright E2E 계층 제외).
+- `turbo run test` → 18개 테스트 파일, **329개 테스트, 0개 실패** — 패키지별 분포: `error-core` 280 / `error-adapters` 12 / `error-next` 37 (§10 스위트에서 Playwright E2E 계층 제외).
 - `apps/error-architecture` → `next build`(Next 16.2, Turbopack) 성공: 10개 라우트, TypeScript 통과, `proxy.ts` 인식, `authInterrupts` 활성. 런타임 스모크: `x-request-id` 종단 간 전파, `/api/health` 200, `networkBoundary` 프로토콜 응답, `raise()` 인터럽트(not-found→404 / forbidden→403).
 - 재현(모노레포 루트): `pnpm install && pnpm turbo run typecheck test && pnpm build`.
 - 정본 소스 트리: `packages/error-core/src`(+ `adapters/`), `packages/error-adapters/src`, `packages/error-next/src`(+ `components/`), `apps/error-architecture`(`app/`, `lib/`, `proxy.ts`). 테스트는 각 패키지 `src/**/__tests__/` 아래에 위치한다.
@@ -4061,7 +4140,7 @@ describe("§10.3 i18n fallback completeness (CI guard)", () => {
 | `safeServerAction` 검증 (§7.1) | `parsed.error.flatten().fieldErrors` | `… .fieldErrors as Record<string, string[]>` | zod의 `flatten()`은 값 타입을 넓힌다; 레지스트리 `details` 스키마는 `Record<string, string[]>`를 기대하므로, `makeError`를 만족시키려면 캐스트가 필요하다. 재사용 가능한 소비자 측 리더는 새로운 `fieldErrorsFromError` 헬퍼이다 (§12.5). |
 | `networkBoundary` 상태 클래스 (§8.5) | `const code: ErrorCode = status >= 500 ? …` | `const code: "HTTP_SERVER_ERROR" \| "HTTP_CLIENT_ERROR" = …` | `ErrorCode`로 넓히면 `details`가 전체 유니온을 만족하도록 강제되어 `makeError`의 추론이 깨진다; 좁혀진 리터럴은 `{ status }`가 타입 체크를 통과하게 한다. 이 경계는 또한 아웃바운드 페이지 `correlationId`를 찍어 넣는다 (§12.5). |
 | Sentry reporter (§5.3) | `captureException(error, { … })` 평범한 컨텍스트 | `captureException(error, (scope) => { … })` | v8 `captureException`은 `setFingerprint`/`setContext`/`setLevel`을 위해 `CaptureContext` 콜백 형태 `(scope) => {…}`를 받는다. |
-| `browser-boundary` 핸들러 (§8.3) | DOM 핸들러 본문으로서 `=> handleError(…)` | `=> void handleError(…)` | `handleError`는 `ResolvedAppError`를 반환한다 (r3); `window.onerror`/`onunhandledrejection`은 `void`/boolean 반환을 기대하므로, 결과는 `void`로 폐기된다. |
+| `browser-boundary` 핸들러 (§8.3) | DOM 핸들러 본문으로서 `=> handleError(…)` | `addEventListener` + `void handleError(…)` + cleanup | `handleError`는 `ResolvedAppError`를 반환한다 (r3); DOM 이벤트 리스너는 결과를 사용하지 않으므로 `void`로 폐기하고, 전역 슬롯 덮어쓰기 대신 cleanup 가능한 리스너를 등록한다. |
 
 ### 12.3 모듈 구성 재조정 (설계가 출하된 트리보다 더 잘게 분할됨)
 
@@ -4079,7 +4158,7 @@ describe("§10.3 i18n fallback completeness (CI guard)", () => {
 
 ### 12.4 상태
 
-§1–§11의 모든 코드 블록은 이제 컴파일되는 구현과 일치하거나, 출하된 트리가 통합한 지점이 주석으로 표시되어 있다. 아키텍처는 완전하며(잘려나간 기능 없음) 타입 수준 + 단위/통합 수준에서 종단 간으로 검증되었다. 이 문서는 r5 검증된 트리와 일치하며(47개 소스 + 17개 테스트 파일, `tsc` exit 0, `vitest` 324/0), **r6에서 동일한 트리가 Turborepo + pnpm 모노레포의 세 패키지 + Next 16 앱으로 재구성되었다(설계 불변, §12.6)** — 324개 테스트가 패키지별(277/11/36)로 그대로 통과하고 앱이 Next 16.2로 빌드된다.
+§1–§11의 모든 코드 블록은 이제 컴파일되는 구현과 일치하거나, 출하된 트리가 통합한 지점이 주석으로 표시되어 있다. 아키텍처는 완전하며(잘려나간 기능 없음) 타입 수준 + 단위/통합 수준에서 종단 간으로 검증되었다. 이 문서는 r7 검증된 트리와 일치하며(`tsc` exit 0, `vitest` 329/0), **r6에서 동일한 트리가 Turborepo + pnpm 모노레포의 세 패키지 + Next 16 앱으로 재구성되었다(설계 불변, §12.6)** — 329개 테스트가 패키지별(280/12/37)로 통과하고 앱이 Next 16.2로 빌드된다.
 
 ### 12.5 r5 변경
 
@@ -4151,13 +4230,13 @@ apps/
 
 - **배럴 3개.** 클라이언트 배럴 = `error-next`(= `export * from "error-core"` + React/Next 진입점), 서버 배럴 = `error-next/server`, 커널 배럴 = `error-core`(§7.1b). 원본 `core/error/index.ts`가 들고 있던 `useErrorHandler`·`makeQueryClient`는 React/Next 의존이라 `error-next`로 옮겨졌고, 나머지 클라 안전 표면은 `error-core` 배럴에 남아 `export *`로 합쳐진다.
 - **컴파일·해소 모델.** 패키지는 **raw-TS(빌드 단계 없음)** — `package.json`의 `exports`가 `.ts` 소스를 직접 가리킨다(`"."`→`index.ts`, `"./*"`→`./src/*.ts`, error-next는 `"./server"` 추가). 앱은 `next.config.ts`의 `transpilePackages: ["error-core","error-adapters","error-next"]`로 트랜스파일한다. cross-package import는 패키지명(`error-core/app-error` 등)으로, 패키지 *내부* import는 상대 경로로 유지된다.
-- **컴포지션 루트는 앱이 소유.** 라이브러리의 `ErrorHandlerInit`은 no-op deps 기본을 싣지만, 데모 앱은 `lib/composition-root.ts`의 `buildClientDeps()`로 sonner presenter + guarded console reporter를 조립하고(클라), 서버는 `error-next/server`의 기본 `serverDeps`를 쓴다(Sentry는 `Sentry.init()` 없으면 no-op — 교체 패턴은 해당 파일 주석 참조). 이는 원본 §12.3의 "buildClientDeps를 ErrorHandlerInit에 인라인"을 앱 레이어의 명시적 DI 루트로 되돌린 것이다.
+- **컴포지션 루트는 앱이 소유.** 라이브러리의 `ErrorHandlerInit`은 no-op deps 기본을 싣지만, 데모 앱은 `lib/composition-root.ts`의 `buildClientDeps()`로 sonner presenter + guarded console reporter를 조립하고(클라), 서버는 `error-next/server`의 기본 `serverDeps`를 쓴다. 기본 serverDeps는 optional peer인 Sentry를 eager import하지 않는다. Sentry를 쓰는 앱은 `error-adapters/sentry-reporter`를 명시적으로 조립하고 `Sentry.init({ beforeSend: sentryBeforeSend, ... })`를 배선한다. 이는 원본 §12.3의 "buildClientDeps를 ErrorHandlerInit에 인라인"을 앱 레이어의 명시적 DI 루트로 되돌린 것이다.
 - **단일 출처화.** `error-next/server`는 `withRetry`/`WithRetryOptions`만 재노출하고, `BackoffConfig`/`DEFAULT_BACKOFF`는 `error-core`(backoff.ts)를 단일 출처로 둔다(중복 공개 표면 제거).
 - **테스트 보존.** 17개 테스트 파일은 각 패키지로 분산되되 원본 `@/error/*`·`@/components/*` 별칭을 그대로 쓰고, 패키지별 `vitest.config.ts`가 이를 라우팅한다(next-internal→`./src`, core→`error-core/*`, 벤더→`error-adapters/*`). cross-package `vi.mock`은 alias 타깃과 소스 import가 동일 realpath로 해소되어 매칭된다.
-- **벤더 버전 핀(의도적).** 커널/어댑터/통합의 dev·peer는 검증 baseline(zod3·@sentry8·sonner1·TanStack5·vitest2·next15.1.4 dev)을 유지해 324개 테스트를 보존한다. **앱만** Next 16.2 + React 19.2. peer 범위 `next >=15.1.0`이 둘 다 커버하며, @sentry8은 next16 peer를 공식 지원하지 않지만 빌드 플러그인 미사용·런타임 SDK만 쓰므로 무해하다.
+- **벤더 버전 핀(의도적).** 커널/어댑터/통합의 dev·peer는 검증 baseline(zod3·@sentry8·sonner1·TanStack5·vitest2·next15.1.4 dev)을 유지해 329개 테스트를 보존한다. **앱만** Next 16.2 + React 19.2. peer 범위 `next >=15.1.0`이 둘 다 커버한다. @sentry8은 Sentry 어댑터를 명시적으로 사용할 때만 필요하다.
 
 **레퍼런스 앱이 시연하는 것.** `/demo/form-action`(safeFormAction + useActionState; VALIDATION 인라인 / INVALID_CREDENTIALS Result.Failure), `/demo/query-retry`(networkBoundary + TanStack; retryable 배선·Retry-After·토스트), `/demo/boundaries`(raise() → notFound/forbidden, fault → error.tsx), `/demo/server-retry`(withRetry 서버 재시도), `/api/health`(dead-man's-switch), `proxy.ts`(종단 간 correlationId).
 
-**명령어.** `pnpm install` → `pnpm turbo run typecheck test`(324/0) → `pnpm build`(앱 Next 16 빌드) → `pnpm dev`.
+**명령어.** `pnpm install` → `pnpm turbo run typecheck test`(329/0) → `pnpm build`(앱 Next 16 빌드) → `pnpm dev`.
 
 > **보류됨(r6 범위 밖).** npm 스코프 부여(현재 비스코프 `error-core`/`error-adapters`/`error-next`), 패키지의 빌드 산출물(`dist`) 발행(현재 raw-TS 소비 전용), Changesets 기반 버전 관리, 벤더 SDK 업그레이드(@sentry 8→10 등 — 어댑터가 v8 API에 맞춰져 있어 테스트 보존을 위해 보류).

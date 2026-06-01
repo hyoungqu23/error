@@ -40,5 +40,5 @@ const deps = {
 ## 테스트
 
 ```bash
-pnpm --filter error-adapters test   # 11 tests
+pnpm --filter error-adapters test   # 12 tests
 ```

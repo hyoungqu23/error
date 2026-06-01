@@ -5,8 +5,8 @@
 //
 //   - serverDeps               : the request-INDEPENDENT sink choice (built once per
 //                                module load — NO correlationId/user; those live on the
-//                                per-request ctx). Composes Sentry + console reporter,
-//                                a no-op presenter, and the pager notifier.
+//                                per-request ctx). Composes a guarded console reporter,
+//                                a no-op presenter, and a severity-gated pager notifier.
 //   - getRequestCorrelationId  : request-scoped correlation ID (React cache()).
 //   - getRequestHandler        : per-request `handleServerError`, request-scoped via
 //                                React cache(), bound to serverDeps.registry through
@@ -22,25 +22,33 @@ import type { ResolvedAppError } from "error-core/app-error";
 import type { HandleErrorDeps } from "error-core/types";
 import type { Presenter } from "error-core/telemetry";
 import type { TelemetryContext } from "error-core/telemetry";
-import type { Notifier } from "error-core/notifier";
+import {
+  noopNotifier,
+  policyGatedNotifier,
+  thresholdAlertPolicy,
+  type Notifier,
+} from "error-core/notifier";
 import { DEFAULT_ERROR_REGISTRY } from "error-core/registry";
 import { guardedCompositeReporter, type GuardedCompositeReporter } from "error-core/adapters/composite";
-import { createSentryReporter } from "error-adapters/sentry-reporter";
 import { createConsoleReporter } from "error-core/adapters/console-reporter";
 import { createPagerNotifier, webhookPagerTransport } from "error-adapters/pager-notifier";
-import { noopNotifier } from "error-core/notifier";
 
 /** Server presenter is a no-op: there is no DOM. All server handleError calls pass present:"silent". */
 const serverPresenter: Presenter = { present() {} };
 
 /**
  * Build the server alerting sink. Paging belongs to the server runtime and is gated by
- * an AlertPolicy threshold owned by the pager adapter. When no webhook is configured
+ * the shared AlertPolicy. When no webhook is configured
  * (tests / local / preview), fall back to the no-op notifier so handleError never alerts.
  */
 const buildServerNotifier = (): Notifier => {
   const url = process.env.PAGER_WEBHOOK_URL;
-  return url ? createPagerNotifier(webhookPagerTransport(url)) : noopNotifier;
+  return url
+    ? policyGatedNotifier(
+        thresholdAlertPolicy({ threshold: "fatal", suppressRuntimes: ["client"] }),
+        createPagerNotifier(webhookPagerTransport(url)),
+      )
+    : noopNotifier;
 };
 
 /**
@@ -50,7 +58,6 @@ const buildServerNotifier = (): Notifier => {
  * health().failures crossing a threshold is what the /health GET turns into a 503.
  */
 export const serverReporter: GuardedCompositeReporter = guardedCompositeReporter([
-  { label: "sentry", reporter: createSentryReporter() },
   { label: "console", reporter: createConsoleReporter() },
 ]);
 

@@ -1,6 +1,7 @@
 // error/normalize.ts  — Step 1 of the single processing path.
 import {
   DomainError,
+  isClientSerializedError,
   isDomainError,
   isSerializedError,
   type SerializedError,
@@ -32,6 +33,14 @@ export function normalizeToDomainError(
         ? { ...input, correlationId }
         : input;
     return DomainError.fromSerialized(withId);
+  }
+
+  if (isClientSerializedError(input)) {
+    const withId =
+      input.correlationId === undefined && correlationId !== undefined
+        ? { ...input, correlationId }
+        : input;
+    return DomainError.fromClientSerialized(withId);
   }
 
   if (input instanceof Error) {

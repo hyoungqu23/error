@@ -14,6 +14,23 @@ import { actionSuccess, actionFailure, type Result } from "error-core/result";
 /** The state useActionState holds for a form: a prior Result, or null before first submit. */
 export type FormState<R> = Result<R> | null;
 
+type FormObject = Record<string, FormDataEntryValue | FormDataEntryValue[]>;
+
+const formDataToObject = (formData: FormData): FormObject => {
+  const out: FormObject = {};
+  for (const [key, value] of formData.entries()) {
+    const existing = out[key];
+    if (existing === undefined) {
+      out[key] = value;
+    } else if (Array.isArray(existing)) {
+      existing.push(value);
+    } else {
+      out[key] = [existing, value];
+    }
+  }
+  return out;
+};
+
 export const safeFormAction =
   <S extends z.ZodType, R>(
     schema: S,
@@ -22,8 +39,8 @@ export const safeFormAction =
   async (prevState: FormState<R>, formData: FormData): Promise<Result<R>> => {
     let parsed: z.SafeParseReturnType<unknown, z.infer<S>>;
     try {
-      // Object.fromEntries collapses FormData to a plain object; Zod owns coercion.
-      parsed = schema.safeParse(Object.fromEntries(formData));
+      // Preserve duplicate field names as arrays; Zod owns coercion/refinement.
+      parsed = schema.safeParse(formDataToObject(formData));
     } catch (error) {
       // safeParse never throws; a throw here is a programmer/runtime fault → unexpected path.
       rethrowControlFlow(error);

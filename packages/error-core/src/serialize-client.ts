@@ -4,21 +4,9 @@
 // Free functions (not methods) so app-error.ts need not import this file (no cycle).
 import type { ErrorCode } from "./registry";
 import type { ErrorDetailsMap } from "./schema";
-import type { DomainError } from "./app-error";
+import type { ClientSerializedError, DomainError } from "./app-error";
 
-/**
- * Client-bound DTO. NOTE: no free-text `message` field — copy is resolved on the
- * client from `userMessageKey` (i18n). This is the type that crosses to the browser
- * via Result.Failure (§7.1) and Route Handlers (§7.4).
- */
-export interface ClientSerializedError {
-  readonly code: ErrorCode;
-  readonly userMessageKey: string;
-  readonly correlationId?: string;
-  readonly digest?: string;
-  /** Present ONLY for codes whose details are allowlisted, and only the picked fields. */
-  readonly details?: unknown;
-}
+export type { ClientSerializedError };
 
 /**
  * Per-code allowlist for client-bound `details`. Each entry is the EXACT set of keys

@@ -1,6 +1,6 @@
 # `core/error/` 파일 가이드
 
-이 디렉터리는 통합 에러 시스템의 구현체다(설계 문서: `error-design.md` / `error-design-kr.md`, 정합성: `tsc --noEmit` 0 · `vitest` 324/0).
+이 디렉터리는 통합 에러 시스템의 구현체다(설계 문서: `error-design.md` / `error-design-kr.md`, 정합성: `tsc --noEmit` 0 · `vitest` 329/0).
 
 > **먼저 — 파일이 38개라 많아 보이지만, 소비자가 보는 공개 표면은 단 2개다.**
 > - 클라이언트/기능 코드 → `import { … } from "@/error"` (`index.ts`)
@@ -39,10 +39,10 @@
 
 | 파일 | LOC | 책임 | 주요 export | 의존 |
 |---|---|---|---|---|
-| `app-error.ts` | 218 | 핵심. `DomainError` 클래스(getter는 활성 레지스트리 읽음), `resolvePolicy`, 타입가드, 재수화 진입 | `DomainError`, `resolvePolicy`, `ResolvedAppError`, `SerializedError`, `isDomainError`, `isSerializedError`, `isExpectedCode` | `./registry`, `./active-registry`, `./schema`, `./runtime`, `./severity`, `./policy` |
+| `app-error.ts` | 218+ | 핵심. `DomainError` 클래스(getter는 활성 레지스트리 읽음), `resolvePolicy`, 타입가드, 내부/클라 DTO 재수화 진입 | `DomainError`, `resolvePolicy`, `ResolvedAppError`, `SerializedError`, `ClientSerializedError`, `isDomainError`, `isSerializedError`, `isClientSerializedError`, `isExpectedCode` | `./registry`, `./active-registry`, `./schema`, `./runtime`, `./severity`, `./policy` |
 | `make-error.ts` | 30 | 단일 생성 경로(검증 + UNKNOWN_* 폴백) | `makeError`, `unknownCodeForRuntime` | `./schema`, `./app-error`, `./runtime`, `./registry` |
 | `normalize.ts` | 89 | 처리 경로 1단계 — 경계 넘은 plain object → `DomainError` 재수화(4분기) | `normalizeToDomainError` | `./app-error`, `./make-error`, `./registry` |
-| `serialize-client.ts` | 104 | **누출 방지 강제 지점**. 클라 전송 시 free-text message 제거 + `details` 허용목록 게이팅 | `toClientSerialized`, `DETAILS_ALLOWLIST`, `gateClientDetails` | `./registry`, `./schema`, `./app-error` |
+| `serialize-client.ts` | 104+ | **누출 방지 강제 지점**. 클라 전송 시 free-text message 제거 + `details` 허용목록 게이팅 | `toClientSerialized`, `DETAILS_ALLOWLIST`, `gateClientDetails`, `ClientSerializedError` | `./registry`, `./schema`, `./app-error` |
 | `result.ts` | 9 | 직렬화 안전 `Result` 계약(뮤테이션 트랙) | `Result`, `Success`, `Failure`, `actionSuccess`, `actionFailure` | `./app-error`, `./serialize-client` |
 
 ## 3. 텔레메트리 계약 + 프로세서
@@ -76,7 +76,7 @@
 | `raise.ts` | 30 | 쿼리의 expected 에러 → Next 인터럽트 다리 | `raise` | server-only |
 | `route-handler.ts` | 17 | `AppError` → HTTP 응답(`httpStatus` + correlationId) | `toErrorResponse` | |
 | `safe-handler.ts` | 15 | 인터랙션 경계(이벤트 핸들러 try/catch) | `safeHandler` | client |
-| `browser-boundary.ts` | 22 | 브라우저 경계 — `window.onerror`/`onunhandledrejection` 최후 안전망 | `initBrowserBoundary` | client |
+| `browser-boundary.ts` | 30+ | 브라우저 경계 — `error`/`unhandledrejection` 최후 안전망(addEventListener + cleanup) | `initBrowserBoundary` | client |
 
 ## 6. 재시도 헬퍼
 

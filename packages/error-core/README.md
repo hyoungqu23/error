@@ -8,7 +8,7 @@
 
 - **레지스트리(SSOT)** — 코드별 정책(`kind`/`severity`/`present`/`log`/`httpStatus`/`retryable`/`userMessageKey`).
 - **에러 모델** — `DomainError`(getter는 활성 레지스트리를 읽음), `makeError`, 정규화/재수화(`normalizeToDomainError`).
-- **누출 방지 게이트** — `toClientSerialized`가 free-text message를 제거하고 `details`를 허용목록으로 게이팅.
+- **누출 방지 게이트** — `toClientSerialized`가 free-text message를 제거하고 `details`를 허용목록으로 게이팅. `networkBoundary`는 이 public DTO를 다시 `DomainError`로 재수화한다.
 - **텔레메트리 계약** — `Reporter`/`Presenter`/`Notifier` 인터페이스 + 단일 처리 경로(`createHandleError`).
 - **순수 재시도 정책** — `computeRetryDelay`, `parseRetryAfter`(client+server safe).
 - **네트워크 경계** — `networkBoundary`(raw transport → `DomainError`, 8개 코드의 유일 생산자).
@@ -35,5 +35,5 @@ import { networkBoundary } from "error-core/network-boundary";
 ## 테스트
 
 ```bash
-pnpm --filter error-core test   # 277 tests
+pnpm --filter error-core test   # 280 tests
 ```

@@ -37,7 +37,7 @@ error-core  ◄──  error-adapters  ◄──  error-next  ◄──  apps/er
 | **raw-TS 내부 패키지(빌드 단계 없음)** | 패키지는 `.ts` 소스를 그대로 export(`exports` 맵). 앱 번들러가 `transpilePackages`로 트랜스파일. 빌드/watch 오케스트레이션 불필요. |
 | **공개 표면 2개 유지** | 소비자는 클라이언트 배럴(`error-next`)·서버 배럴(`error-next/server`)만 본다. 내부 모듈은 deep import(`error-core/app-error`)도 가능. |
 | **server-only 누출 방지** | 클라이언트 배럴의 전이 import 폐포에 `"server-only"` 모듈이 하나도 없다. 잘못된 클라 import는 런타임 누출이 아니라 **빌드 에러**가 된다. |
-| **벤더 버전 핀 유지** | 커널/어댑터는 검증된 baseline(zod 3 · @sentry 8 · sonner 1 · TanStack 5 · vitest 2)을 그대로 써 324개 테스트를 보존. **앱만** Next 16 · React 19.2. peer 범위가 둘 다 커버. |
+| **벤더 버전 핀 유지** | 커널/어댑터는 검증된 baseline(zod 3 · @sentry 8 · sonner 1 · TanStack 5 · vitest 2)을 그대로 써 329개 테스트를 보존. **앱만** Next 16 · React 19.2. peer 범위가 둘 다 커버. |
 
 ## 명령어
 
@@ -45,7 +45,7 @@ error-core  ◄──  error-adapters  ◄──  error-next  ◄──  apps/er
 pnpm install              # 워크스페이스 전체 설치 (pnpm 11+)
 
 pnpm typecheck            # turbo: 3개 패키지 tsc --noEmit
-pnpm test                 # turbo: 324개 테스트 (core 277 · adapters 11 · next 36)
+pnpm test                 # turbo: 329개 테스트 (core 280 · adapters 12 · next 37)
 pnpm build                # turbo: 앱 next build (Turbopack)
 pnpm dev                  # turbo: 앱 dev 서버
 

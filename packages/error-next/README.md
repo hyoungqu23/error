@@ -32,14 +32,14 @@
   "react": ">=19.0.0",
   "react-dom": ">=19.0.0",
   "@tanstack/react-query": "^5.0.0",
-  "@sentry/nextjs": "^8.0.0"     // optional — 기본 serverDeps가 Sentry reporter를 조립
+  "@sentry/nextjs": "^8.0.0"     // optional — Sentry reporter를 직접 조립할 때만 필요
 }
 ```
 
-> 기본 `serverDeps`는 모듈 로드 시 Sentry reporter를 eager하게 조립한다(`Sentry.init` 없이는 no-op). Sentry를 빼려면 컴포지션 루트에서 자체 deps로 `createHandleError`를 래핑하면 된다.
+> 기본 `serverDeps`는 optional peer인 Sentry를 eager import하지 않는다. 기본 서버 reporter는 guarded console이며, Sentry를 쓰려면 앱의 컴포지션 루트에서 `error-adapters/sentry-reporter`를 명시적으로 조립하고 `Sentry.init({ beforeSend: sentryBeforeSend, ... })`를 배선한다.
 
 ## 테스트
 
 ```bash
-pnpm --filter error-next test   # 36 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
+pnpm --filter error-next test   # 37 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
 ```

@@ -15,6 +15,15 @@ export interface HandleErrorOptions {
   ctx?: Partial<TelemetryContext>;
 }
 
+const guardSink = (fn: () => void): void => {
+  try {
+    fn();
+  } catch {
+    // Error handling must never become the error source. Production visibility
+    // still belongs in guardedCompositeReporter / pager transports.
+  }
+};
+
 export const createHandleError =
   (deps: HandleErrorDeps, baseCtx: TelemetryContext) =>
   (input: unknown, options: HandleErrorOptions = {}): ResolvedAppError => {
@@ -33,16 +42,17 @@ export const createHandleError =
     const ctx: TelemetryContext = { ...baseCtx, ...options.ctx };
 
     // 1. Sentry / console — only when the log policy asks for it.
-    if (log !== "none") deps.reporter.report(error, log, ctx);
+    if (log !== "none") guardSink(() => deps.reporter.report(error, log, ctx));
     // 2. alerting gate (no-op below threshold).
-    deps.notifier.notify(error, severity, ctx);
+    guardSink(() => deps.notifier.notify(error, severity, ctx));
     // 3. PRESENTER only for Presenter-actionable surfaces. "redirect"/"page" are
     //    escalated by the client useErrorHandler, not the Presenter; "inline"/"silent"
     //    do nothing here. Only "toast"/"alert" reach present().
-    if (present === "toast" || present === "alert") deps.presenter.present(error, present, ctx);
+    if (present === "toast" || present === "alert")
+      guardSink(() => deps.presenter.present(error, present, ctx));
     // 4. T1 IMPACT BREADCRUMB: record the user-visible impact WITHOUT a re-capture,
     //    keyed by ctx.correlationId, INDEPENDENT of log. Skipped only when truly silent.
-    if (present !== "silent") deps.reporter.breadcrumb(error, present, ctx);
+    if (present !== "silent") guardSink(() => deps.reporter.breadcrumb(error, present, ctx));
 
     // The point: caller drives context-specific UI (incl. "page" escalation) off result.policy.
     return { error, code: error.code, policy: { ...base, severity, present, log } };
