@@ -3,12 +3,15 @@
 import type { OccurrenceContext, ClientErrorPayload } from "./types";
 import { isKnownErrorCode } from "./codes";
 
+// occurrence/userCanRetry는 서버-사이드 컨텍스트 전용이므로 wire에 포함하지 않음;
+// retryAfterMs는 decision/messageVars 계산에 영향을 주므로 round-trip함.
 export interface SerializedError {
   readonly code: string;
   readonly message: string;
   readonly details: unknown;
   readonly correlationId?: string;
   readonly digest?: string;
+  readonly retryAfterMs?: number;
 }
 
 export interface AppErrorOptions {
@@ -42,17 +45,17 @@ export class AppError<C extends string = string> extends Error {
     this.retryAfterMs = options.retryAfterMs;
     this.userCanRetry = options.userCanRetry;
     this.digest = options.digest;
-    Object.setPrototypeOf(this, AppError.prototype);
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 
   /** 내부 직렬화(서버 로그용) — message + ungated details 유지. 클라 전송에는 toClientErrorPayload 사용. */
   toSerialized(): SerializedError {
-    return { code: this.code, message: this.message, details: this.details, correlationId: this.correlationId, digest: this.digest };
+    return { code: this.code, message: this.message, details: this.details, correlationId: this.correlationId, digest: this.digest, retryAfterMs: this.retryAfterMs };
   }
 
-  /** 서버-신뢰 wire(SerializedError) → AppError 재수화. correlationId/digest 보존. */
+  /** 서버-신뢰 wire(SerializedError) → AppError 재수화. correlationId/digest/retryAfterMs 보존. */
   static fromSerialized(wire: SerializedError): AppError {
-    return new AppError(wire.code, wire.details, { message: wire.message, correlationId: wire.correlationId, digest: wire.digest });
+    return new AppError(wire.code, wire.details, { message: wire.message, correlationId: wire.correlationId, digest: wire.digest, retryAfterMs: wire.retryAfterMs });
   }
 
   /** 클라-신뢰 wire(ClientErrorPayload) → AppError 재수화. messageKey는 메시지로 쓰지 않음(키 그대로). */
@@ -66,6 +69,8 @@ export class AppError<C extends string = string> extends Error {
 export const appError = <C extends string>(code: C, details: unknown = null, options: AppErrorOptions = {}): AppError<C> =>
   new AppError(code, details, options);
 
+// instanceof + duck-type. "DomainError" name은 convergence 기간 동안 legacy/cross-package interop을 위해 허용함
+// (아직 AppError로 마이그레이션되지 않은 구 error-core 에러).
 export const isAppError = (value: unknown): value is AppError =>
   value instanceof AppError ||
   (typeof value === "object" && value !== null &&
