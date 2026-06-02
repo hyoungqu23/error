@@ -1,0 +1,134 @@
+// error-core/decision/types.ts — 결정 어휘(순수 데이터 타입). DomainError/React/Next 무관.
+// 출처: error-decision-system/src/index.ts:1-133 (ReporterSink/NotifierSink 제외)
+
+export type ErrorCategory = "business" | "operational" | "fault";
+
+export type ErrorSensitivity =
+  | "public"
+  | "auth"
+  | "permission"
+  | "pii"
+  | "business-sensitive"
+  | "internal";
+
+export type InteractionKind =
+  | "page-load"
+  | "query"
+  | "mutation"
+  | "form-submit"
+  | "background-sync"
+  | "route-guard"
+  | "event-handler"
+  | "render";
+
+export type UiScope =
+  | "field"
+  | "form"
+  | "component"
+  | "panel"
+  | "page"
+  | "session"
+  | "background";
+
+export type Criticality = "low" | "normal" | "core" | "revenue" | "security";
+export type DisclosureLevel = "specific" | "safe-vague" | "generic" | "support-only";
+
+export type UserAction =
+  | "fix-input"
+  | "retry"
+  | "login"
+  | "request-access"
+  | "choose-different-option"
+  | "wait"
+  | "go-back"
+  | "contact-support"
+  | "none";
+
+export type ErrorSurface =
+  | "field"
+  | "form"
+  | "inline"
+  | "empty"
+  | "toast"
+  | "dialog"
+  | "page"
+  | "redirect"
+  | "silent";
+
+export interface TelemetryDecision {
+  capture: boolean;
+  level: "info" | "warning" | "error" | "fatal";
+  breadcrumb: boolean;
+  alert: boolean;
+  sampleRate?: number;
+  fingerprint?: readonly string[];
+  tags?: Record<string, string>;
+}
+
+export interface ErrorSemantics<Code extends string = string, Details = unknown> {
+  code: Code;
+  category: ErrorCategory;
+  sensitivity: ErrorSensitivity;
+  defaultHttpStatus: number;
+  defaultRetryable: boolean;
+  defaultMessageKey: string;
+  messageKeys?: Partial<Record<DisclosureLevel, string>>;
+  disclosureByUiScope?: Partial<Record<UiScope, DisclosureLevel>>;
+  disclosureByResource?: Partial<Record<string, DisclosureLevel>>;
+  actionByResource?: Partial<Record<string, UserAction>>;
+  defaultAction?: UserAction;
+  actionByUiScope?: Partial<Record<UiScope, UserAction>>;
+  actionByInteraction?: Partial<Record<InteractionKind, UserAction>>;
+  surfaceByResource?: Partial<Record<string, ErrorSurface>>;
+  telemetryBySurface?: Partial<Record<ErrorSurface, Partial<TelemetryDecision>>>;
+  redirectTarget?: string;
+  detailsExposure: "none" | "allowlist";
+  detailsAllowlist?: readonly string[];
+  validateDetails?: (details: unknown) => details is Details;
+}
+
+export interface OperationMeta<Operation extends string = string> {
+  operation: Operation;
+  owner: string;
+  criticality: Criticality;
+  defaultUiScope: UiScope;
+  piiRisk: boolean;
+}
+
+export interface OccurrenceContext<Operation extends string = string> {
+  operation: Operation;
+  interaction: InteractionKind;
+  uiScope: UiScope;
+  criticality: Criticality;
+  fieldPath?: string;
+  resource?: string;
+  userCanRetry?: boolean;
+  idempotent?: boolean;
+  background?: boolean;
+}
+
+export interface RuntimeContext {
+  runtime: "server" | "client";
+  route?: string;
+  user?: { id: string; role?: string } | null;
+  correlationId?: string;
+  traceId?: string;
+}
+
+export interface UserErrorDecision {
+  surface: ErrorSurface;
+  disclosure: DisclosureLevel;
+  messageKey: string;
+  action: UserAction;
+  target?: string;
+  supportCode?: string;
+  retryAfterMs?: number;
+}
+
+export interface ErrorDecision {
+  user: UserErrorDecision;
+  telemetry: TelemetryDecision;
+}
+
+export type ErrorCatalog = Record<string, ErrorSemantics>;
+export type OperationCatalog = Record<string, OperationMeta>;
