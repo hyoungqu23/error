@@ -76,4 +76,10 @@ describe("resolveErrorDecision — scenario matrix (canonical catalog)", () => {
     const d = decide("NETWORK_ERROR", occ({ interaction: "background-sync", uiScope: "background", criticality: "low" }));
     expect(d.user.surface).toBe("silent");
   });
+
+  it("RATE_LIMITED retains retryAfterMs on the decision for render-time {seconds} (D5)", () => {
+    const d = decide("RATE_LIMITED", occ({ interaction: "form-submit", uiScope: "form" }), { retryAfterMs: 5000 });
+    expect(d.user.retryAfterMs).toBe(5000);
+    expect(d.user.messageVars).toBeUndefined(); // 카운트다운은 render-time 도출
+  });
 });
