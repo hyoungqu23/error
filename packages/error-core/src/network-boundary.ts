@@ -2,12 +2,21 @@
 import { z } from "zod";
 import {
   DomainError,
+  construct,
   isClientSerializedError,
   isSerializedError,
   type SerializedError,
 } from "./app-error";
-import { makeError } from "./make-error";
 import { parseRetryAfter } from "./retry-after";
+
+// P3b-ii: network-boundary stays on the OLD DomainError stack (its withCorrelation/
+// fromSerialized/isSerializedError path is registry-based) until P3c. Use the old
+// `construct` so produced errors are DomainError, unaffected by makeError → AppError.
+const makeError = (opts: {
+  code: Parameters<typeof construct>[0];
+  details?: unknown;
+  cause?: unknown;
+}): DomainError => construct(opts.code, opts.details ?? null, { cause: opts.cause });
 
 export interface NetworkBoundaryOptions extends Omit<RequestInit, "signal"> {
   /** Zod schema the JSON body is validated against. Parse failure → SCHEMA_MISMATCH. */
