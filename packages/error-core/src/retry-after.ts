@@ -1,5 +1,5 @@
 // error/retry-after.ts — pure parsing + the "how long until retry?" oracle (client + server safe)
-import { isDomainError } from "./app-error";
+import { isAppError } from "./decision/app-error";
 
 /**
  * Parse an HTTP `Retry-After` header (RFC 9110 §10.2.3) into milliseconds.
@@ -20,10 +20,11 @@ export const parseRetryAfter = (
   return Math.max(0, dateMs - now);
 };
 
-/** Extract a server-provided retry hint (ms) from an error, if it carries one. */
+/** 서버 제공 retry 힌트(ms): 인스턴스 retryAfterMs(D5 단일 소스) 우선, 없으면 details.retryAfterMs(레거시). */
 export const retryAfterHintFromError = (err: unknown): number | undefined => {
-  if (!isDomainError(err)) return undefined;
+  if (!isAppError(err)) return undefined;
+  const valid = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+  if (valid(err.retryAfterMs)) return err.retryAfterMs;
   const details = err.details as { retryAfterMs?: unknown } | null | undefined;
-  const hint = details?.retryAfterMs;
-  return typeof hint === "number" && Number.isFinite(hint) && hint >= 0 ? hint : undefined;
+  return valid(details?.retryAfterMs) ? (details!.retryAfterMs as number) : undefined;
 };
