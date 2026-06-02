@@ -8,19 +8,27 @@
 // x-correlation-id cookie so the route handler honors-inbound instead of minting fresh.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { networkBoundary } from "@/error/network-boundary";
-import { construct, isDomainError, DomainError } from "@/error/app-error";
-import { ErrorDetailsSchema } from "@/error/schema";
-import { toClientSerialized } from "@/error/serialize-client";
-import type { ErrorCode } from "@/error/registry";
+import { AppError, appError, isAppError } from "@/error/decision/app-error";
+import type { ClientErrorPayload } from "@/error/decision/types";
 import { z } from "zod";
 
-// P3b-ii: networkBoundary + toClientSerialized stay on the OLD DomainError stack until P3c
-// (the production `makeError` now returns AppError). Local DomainError-producing shim mirrors
-// the pre-P3b-ii makeError so these fixtures still feed the old DomainError-typed APIs.
-const makeError = (opts: { code: ErrorCode; details?: unknown }): DomainError => {
-  const parsed = ErrorDetailsSchema[opts.code].safeParse(opts.details);
-  return construct(opts.code, parsed.success ? parsed.data : null);
-};
+// P3c: networkBoundary produces AppError via the unified pure-data model + D2 guards.
+// `isDomainError(x, code)` → AppError instance + code check.
+const isDomainError = (x: unknown, code?: string): x is AppError =>
+  isAppError(x) && (code === undefined || (x as AppError).code === code);
+
+// A client-safe Route Handler DTO (ClientErrorPayload): messageKey-keyed, NO `message` field,
+// details already gated. networkBoundary's isClientErrorPayload branch rehydrates these.
+const clientPayload = (
+  code: string,
+  details?: unknown,
+): ClientErrorPayload => ({
+  code,
+  messageKey: `error.${code.toLowerCase()}`,
+  disclosure: "generic",
+  action: "none",
+  ...(details !== undefined ? { details } : {}),
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -116,7 +124,7 @@ describe("networkBoundary — server SerializedError body", () => {
 
     const thrown = await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e);
     expect(isDomainError(thrown, "FORBIDDEN")).toBe(true);
-    const err = thrown as DomainError;
+    const err = thrown as AppError;
     expect(err.code).toBe("FORBIDDEN");
     expect(err.details).toEqual({ requiredRole: "admin" });
   });
@@ -134,38 +142,32 @@ describe("networkBoundary — server SerializedError body", () => {
       ),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("NOT_FOUND");
     expect(err.correlationId).toBe("srv-corr-123");
   });
 
   it("preserves a client-safe Route Handler DTO without a message field", async () => {
-    const dto = toClientSerialized(
-      makeError({ code: "FORBIDDEN", details: { requiredRole: "admin" } }),
-    );
+    // FORBIDDEN payload is gated to no details (detailsExposure:'none').
+    const dto = clientPayload("FORBIDDEN");
     expect("message" in dto).toBe(false);
 
     stubFetchResolving(
       jsonResponse(dto, { status: 403, headers: { "x-request-id": "req-forbidden-1" } }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("FORBIDDEN");
-    expect(err.details).toBeNull();
+    expect(err.details).toBeNull(); // no details on the gated payload → AppError defaults to null
     expect(err.correlationId).toBe("req-forbidden-1");
   });
 
   it("rehydrates allowlisted VALIDATION details from a client-safe Route Handler DTO", async () => {
-    const dto = toClientSerialized(
-      makeError({
-        code: "VALIDATION",
-        details: { fieldErrors: { email: ["invalid"] } },
-      }),
-    );
+    const dto = clientPayload("VALIDATION", { fieldErrors: { email: ["invalid"] } });
 
     stubFetchResolving(jsonResponse(dto, { status: 422 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("VALIDATION");
     expect(err.details).toEqual({ fieldErrors: { email: ["invalid"] } });
   });
@@ -179,7 +181,7 @@ describe("networkBoundary — 429 RATE_LIMITED", () => {
       opaqueResponse({ status: 429, headers: { "retry-after": "120" } }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("RATE_LIMITED");
     expect(err.details).toEqual({ retryAfterMs: 120_000 });
   });
@@ -197,7 +199,7 @@ describe("networkBoundary — 429 RATE_LIMITED", () => {
       opaqueResponse({ status: 429, headers: { "retry-after": future } }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("RATE_LIMITED");
     expect(err.details).toEqual({ retryAfterMs: 30_000 });
   });
@@ -205,7 +207,7 @@ describe("networkBoundary — 429 RATE_LIMITED", () => {
   it("yields RATE_LIMITED with null details when no Retry-After header is present", async () => {
     stubFetchResolving(opaqueResponse({ status: 429 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("RATE_LIMITED");
     expect(err.details).toBeNull();
   });
@@ -218,7 +220,7 @@ describe("networkBoundary — 429 RATE_LIMITED", () => {
       }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("RATE_LIMITED");
     expect(err.correlationId).toBe("req-429-abc");
     expect(err.details).toEqual({ retryAfterMs: 5_000 });
@@ -231,7 +233,7 @@ describe("networkBoundary — HTTP status-class fallback", () => {
   it("maps a generic 4xx (non-serialized body) to HTTP_CLIENT_ERROR with details.status", async () => {
     stubFetchResolving(opaqueResponse({ status: 400 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("HTTP_CLIENT_ERROR");
     expect(err.details).toEqual({ status: 400 });
   });
@@ -239,7 +241,7 @@ describe("networkBoundary — HTTP status-class fallback", () => {
   it("maps a 5xx (non-serialized body) to HTTP_SERVER_ERROR with details.status", async () => {
     stubFetchResolving(opaqueResponse({ status: 503 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("HTTP_SERVER_ERROR");
     expect(err.details).toEqual({ status: 503 });
   });
@@ -249,7 +251,7 @@ describe("networkBoundary — HTTP status-class fallback", () => {
       opaqueResponse({ status: 500, headers: { "x-request-id": "req-500-xyz" } }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("HTTP_SERVER_ERROR");
     expect(err.correlationId).toBe("req-500-xyz");
   });
@@ -258,7 +260,7 @@ describe("networkBoundary — HTTP status-class fallback", () => {
     // Body is valid JSON but has no registry-known `code` → not serialized → status class.
     stubFetchResolving(jsonResponse({ message: "boom", oops: true }, { status: 404 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("HTTP_CLIENT_ERROR");
     expect(err.details).toEqual({ status: 404 });
   });
@@ -272,7 +274,7 @@ describe("networkBoundary — OFFLINE", () => {
     vi.stubGlobal("fetch", fetchSpy);
     vi.stubGlobal("navigator", { onLine: false });
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("OFFLINE");
     // Pre-flight: the network was never touched.
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -289,7 +291,7 @@ describe("networkBoundary — OFFLINE", () => {
       }),
     );
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("OFFLINE");
   });
 });
@@ -303,7 +305,7 @@ describe("networkBoundary — SCHEMA_MISMATCH", () => {
 
     const err = (await networkBoundary(URL_UNDER_TEST, { schema }).catch(
       (e: unknown) => e,
-    )) as DomainError;
+    )) as AppError;
     expect(err.code).toBe("SCHEMA_MISMATCH");
     expect(err.details).toEqual({ endpoint: URL_UNDER_TEST });
   });
@@ -319,7 +321,7 @@ describe("networkBoundary — SCHEMA_MISMATCH", () => {
   it("throws SCHEMA_MISMATCH when an ok body is not valid JSON", async () => {
     stubFetchResolving(opaqueResponse({ status: 200 }));
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("SCHEMA_MISMATCH");
   });
 
@@ -331,7 +333,7 @@ describe("networkBoundary — SCHEMA_MISMATCH", () => {
 
     const err = (await networkBoundary(URL_UNDER_TEST, { schema }).catch(
       (e: unknown) => e,
-    )) as DomainError;
+    )) as AppError;
     expect(err.code).toBe("SCHEMA_MISMATCH");
     expect(err.correlationId).toBe("req-schema-1");
   });
@@ -344,7 +346,7 @@ describe("networkBoundary — NETWORK_ERROR", () => {
     vi.stubGlobal("navigator", { onLine: true });
     stubFetchRejectingNetwork();
 
-    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as DomainError;
+    const err = (await networkBoundary(URL_UNDER_TEST).catch((e: unknown) => e)) as AppError;
     expect(err.code).toBe("NETWORK_ERROR");
     // The original transport error is preserved as the cause.
     expect((err.cause as Error)?.name).toBe("TypeError");
@@ -363,7 +365,7 @@ describe("networkBoundary — abort discrimination", () => {
     // timeoutSignal aborts → fetch rejects with AbortError → discriminated as TIMEOUT.
     const err = (await networkBoundary(URL_UNDER_TEST, { timeoutMs: 5 }).catch(
       (e: unknown) => e,
-    )) as DomainError;
+    )) as AppError;
     expect(err.code).toBe("TIMEOUT");
   });
 
@@ -381,7 +383,7 @@ describe("networkBoundary — abort discrimination", () => {
     // discriminator must attribute this to the external signal.
     controller.abort();
 
-    const err = (await promise) as DomainError;
+    const err = (await promise) as AppError;
     expect(err.code).toBe("REQUEST_ABORTED");
   });
 });

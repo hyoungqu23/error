@@ -35,13 +35,16 @@ export {
   runWithErrorRegistry,
 } from "./active-registry";
 
-// ── 직렬화 안전 Result 계약 + 클라이언트 누출 게이트 ────────────────────────
-export { actionSuccess, actionFailure, type Result, type Success, type Failure } from "./result";
+// ── 직렬화 안전 Result 계약(wire) + 누출 게이트는 decision/system toClientErrorPayload로 일원화 ──
 export {
-  toClientSerialized,
-  gateClientDetails,
-  DETAILS_ALLOWLIST,
-} from "./serialize-client";
+  actionSuccess,
+  degrade,
+  type Result,
+  type Success,
+  type Failure,
+  type DecisionResult,
+  type DecisionFailure,
+} from "./result";
 
 // ── i18n / 메시지 해소 ──────────────────────────────────────────────────────
 export {
@@ -92,7 +95,7 @@ export {
 } from "./backoff";
 export { parseRetryAfter, retryAfterHintFromError } from "./retry-after";
 export { networkBoundary, type NetworkBoundaryOptions } from "./network-boundary";
-export { toErrorResponse } from "./route-handler";
+export { createErrorResponder } from "./route-handler";
 
 // ── 클라이언트 싱글턴 sink + 진입점 (react/next 의존 없음) ──────────────────
 export { initHandleError, handleError, setErrorUser } from "./handler";
