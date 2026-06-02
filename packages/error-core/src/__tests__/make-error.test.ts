@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { makeError } from "@/error/make-error";
-import { isDomainError } from "@/error/app-error";
+import { isAppError } from "@/error/decision/app-error";
 
 // Hoisted holder so the factory can read a value we flip per-test.
 const runtimeState = vi.hoisted(() => ({ value: "server" as "server" | "client" }));
@@ -24,7 +24,7 @@ describe("makeError — §10 validation", () => {
     const details = { fieldErrors: { email: ["required"] } };
     const err = makeError({ code: "VALIDATION", details });
 
-    expect(isDomainError(err, "VALIDATION")).toBe(true);
+    expect(isAppError(err)).toBe(true);
     expect(err.code).toBe("VALIDATION");
     // parsed.data is structurally equal to the supplied object.
     expect(err.details).toEqual(details);

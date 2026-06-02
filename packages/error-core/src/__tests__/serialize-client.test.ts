@@ -8,8 +8,40 @@ import {
   DETAILS_ALLOWLIST,
   type ClientSerializedError,
 } from "@/error/serialize-client";
-import { makeError } from "@/error/make-error";
-import { DomainError } from "@/error/app-error";
+import { construct, DomainError } from "@/error/app-error";
+import { getRuntime } from "@/error/runtime";
+import { ErrorDetailsSchema } from "@/error/schema";
+import type { ErrorCode } from "@/error/registry";
+
+// P3b-ii: serialize-client + toClientSerialized read the OLD DomainError policy getters
+// (userMessageKey/httpStatus) and stay on the old stack until P3c. The production `makeError`
+// now returns an AppError, so this old-stack test keeps a local DomainError-producing shim
+// (the pre-P3b-ii makeError: zod-validate, else UNKNOWN_* fallback).
+const makeError = (opts: {
+  code: ErrorCode;
+  details?: unknown;
+  message?: string;
+  cause?: unknown;
+  correlationId?: string;
+  digest?: string;
+}): DomainError => {
+  const parsed = ErrorDetailsSchema[opts.code].safeParse(opts.details);
+  if (!parsed.success) {
+    const fallback = getRuntime() === "server" ? "UNKNOWN_SERVER_ERROR" : "UNKNOWN_CLIENT_ERROR";
+    return construct(fallback, null, {
+      message: opts.message ?? "알 수 없는 오류가 발생했습니다.",
+      cause: opts.cause ?? opts.details,
+      correlationId: opts.correlationId,
+      digest: opts.digest,
+    });
+  }
+  return construct(opts.code, parsed.data, {
+    message: opts.message,
+    cause: opts.cause,
+    correlationId: opts.correlationId,
+    digest: opts.digest,
+  });
+};
 
 // Deep round-trip helper: a value is JSON-safe iff parse(stringify(x)) deep-equals x.
 const jsonRoundTrips = (x: unknown): boolean => {

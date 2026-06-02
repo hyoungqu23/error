@@ -8,10 +8,19 @@
 // x-correlation-id cookie so the route handler honors-inbound instead of minting fresh.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { networkBoundary } from "@/error/network-boundary";
-import { isDomainError, DomainError } from "@/error/app-error";
-import { makeError } from "@/error/make-error";
+import { construct, isDomainError, DomainError } from "@/error/app-error";
+import { ErrorDetailsSchema } from "@/error/schema";
 import { toClientSerialized } from "@/error/serialize-client";
+import type { ErrorCode } from "@/error/registry";
 import { z } from "zod";
+
+// P3b-ii: networkBoundary + toClientSerialized stay on the OLD DomainError stack until P3c
+// (the production `makeError` now returns AppError). Local DomainError-producing shim mirrors
+// the pre-P3b-ii makeError so these fixtures still feed the old DomainError-typed APIs.
+const makeError = (opts: { code: ErrorCode; details?: unknown }): DomainError => {
+  const parsed = ErrorDetailsSchema[opts.code].safeParse(opts.details);
+  return construct(opts.code, parsed.success ? parsed.data : null);
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

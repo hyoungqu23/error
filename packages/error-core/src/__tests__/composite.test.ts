@@ -5,13 +5,15 @@ import {
   noopReporter,
   guardedCompositeReporter,
 } from "@/error/adapters/composite";
-import { makeError } from "@/error/make-error";
+import { construct } from "@/error/app-error";
 import type { Reporter, TelemetryContext } from "@/error/telemetry";
 import type { DomainError } from "@/error/app-error";
 
 // --- Fixtures ---------------------------------------------------------------
 // OFFLINE takes `null` details — a trivially-valid DomainError for fan-out args.
-const error: DomainError = makeError({ code: "OFFLINE", details: null });
+// P3b-ii: the composite Reporter is the OLD sink (typed over DomainError) and stays on the
+// old stack until P3e; build the fixture via the old `construct` (makeError now → AppError).
+const error: DomainError = construct("OFFLINE", null);
 const ctx: TelemetryContext = { runtime: "server" };
 
 const makeSpyReporter = (): Reporter => ({

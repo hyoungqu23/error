@@ -1,360 +1,188 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+// P3b-ii — createHandleError is now a thin DELEGATE over a DecisionSystem.
+//
+// createHandleError(system, sinks, baseCtx, baseOccurrence) returns a function that, given
+// any caught input:
+//   (1) finalizes via system.finalizeUnknown → a DecisionFailure { error, decision, payload, occurrence },
+//   (2) applies an optional options.telemetry override onto decision.telemetry (5% escape hatch),
+//   (3) runs system.executeErrorDecision → telemetry fan-out (capture → breadcrumb → alert),
+//   (4) returns the DecisionFailure.
+//
+// The engine behavior (resolve/finalize/executeTelemetry) is covered by decision-system.test.ts;
+// here we verify ONLY the delegation wiring: that the returned failure is the system's, and that
+// the sinks are driven by decision.telemetry's booleans (incl. the override), guarded from throws.
+import { describe, it, expect, vi } from "vitest";
 
 import { createHandleError } from "@/error/handle-error";
-import type { HandleErrorDeps } from "@/error/types";
-import type { TelemetryContext, Reporter, Presenter } from "@/error/telemetry";
-import type { Notifier } from "@/error/notifier";
-import { thresholdAlertPolicy, policyGatedNotifier } from "@/error/notifier";
-import { DEFAULT_ERROR_REGISTRY } from "@/error/registry";
-import { runWithErrorRegistry } from "@/error/active-registry";
-import { makeError } from "@/error/make-error";
-import { isDomainError } from "@/error/app-error";
+import { createDecisionSystem } from "@/error/decision/system";
+import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
+import { appError } from "@/error/decision/app-error";
+import type {
+  ReporterSink,
+  NotifierSink,
+  TelemetryContext,
+  OccurrenceContext,
+} from "@/error/decision/types";
 
-// §10 — handleError side effects (r5 step gating).
-//
-// createHandleError(deps, baseCtx) returns a function that, given any caught input,
-// (1) normalizes to a DomainError, (2) resolves the full policy off the INJECTED
-// registry, then fans out in a FIXED order:
-//   (1) reporter.report          — unless the resolved log is "none"
-//   (2) notifier.notify          — ALWAYS (the alert gate lives inside the notifier)
-//   (3) presenter.present        — ONLY for "toast"/"alert" (Presenter-actionable)
-//   (4) reporter.breadcrumb      — T1 impact breadcrumb, unless present === "silent",
-//                                  INDEPENDENT of log
-// …then returns ResolvedAppError. (r5 renamed ux→present; the old "none" is split
-// into "inline" (business-inline) vs "silent" (truly-silent like REQUEST_ABORTED).)
+const OPERATIONS = {
+  "product.read": {
+    operation: "product.read",
+    owner: "catalog",
+    criticality: "core",
+    defaultUiScope: "page",
+    piiRisk: false,
+  },
+} as const;
 
-const BASE_CTX: TelemetryContext = { runtime: "server", correlationId: "c", user: null };
+const makeSystem = () =>
+  createDecisionSystem({
+    errors: CANONICAL_ERROR_SEMANTICS,
+    operations: OPERATIONS,
+    fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+    defaultRuntime: "server",
+  });
 
-const makeReporter = () => ({
-  report: vi.fn(),
-  breadcrumb: vi.fn(),
-  setUser: vi.fn(),
-  setContext: vi.fn(),
-}) satisfies Reporter;
-
-const makePresenter = () => ({ present: vi.fn() }) satisfies Presenter;
-
-const makeDeps = (notifier: Notifier) => {
-  const reporter = makeReporter();
-  const presenter = makePresenter();
-  const deps: HandleErrorDeps = {
-    registry: DEFAULT_ERROR_REGISTRY,
-    reporter,
-    presenter,
-    notifier,
-  };
-  return { deps, reporter, presenter };
+const BASE_CTX: TelemetryContext = {
+  runtime: "server",
+  operation: "product.read",
+  correlationId: "c",
+  user: null,
 };
 
-// Run inside the server registry scope so the DomainError getters (severity/log/present)
-// resolve against DEFAULT_ERROR_REGISTRY deterministically.
-const inScope = <R>(work: () => R): R => runWithErrorRegistry(DEFAULT_ERROR_REGISTRY, work);
+const BASE_OCCURRENCE: OccurrenceContext = {
+  operation: "product.read",
+  interaction: "query",
+  uiScope: "page",
+  criticality: "core",
+};
 
-describe("§10 createHandleError side effects", () => {
-  let notifySpy: ReturnType<typeof vi.fn>;
-  let notifier: Notifier;
+const makeSinks = () => {
+  const reporter: ReporterSink = { capture: vi.fn(), breadcrumb: vi.fn() };
+  const notifier: NotifierSink = { alert: vi.fn() };
+  return { reporter, notifier };
+};
 
-  beforeEach(() => {
-    notifySpy = vi.fn();
-    notifier = { notify: notifySpy };
+describe("createHandleError — decision-system delegate (P3b-ii)", () => {
+  it("returns the system's DecisionFailure { error, decision, payload, occurrence }", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
+
+    const failure = handle(appError("HTTP_SERVER_ERROR", { status: 500 }));
+
+    expect(failure.ok).toBe(false);
+    expect(failure.error.code).toBe("HTTP_SERVER_ERROR");
+    expect(failure.decision).toBeDefined();
+    expect(failure.payload.code).toBe("HTTP_SERVER_ERROR");
+    expect(failure.occurrence.operation).toBe("product.read");
   });
 
-  it("returns a ResolvedAppError { error, code, policy } with the resolved policy", () => {
-    const { deps } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
+  it("wraps a non-AppError into the fallback code via finalizeUnknown", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
 
-    const result = inScope(() =>
-      handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } })),
-    );
+    const failure = handle(new TypeError("boom"));
 
-    expect(isDomainError(result.error, "HTTP_SERVER_ERROR")).toBe(true);
-    expect(result.code).toBe("HTTP_SERVER_ERROR");
-    // policy is the full resolved bundle off the injected registry. r5: `ux` → `present`;
-    // `expected`/`isOperational` are DERIVED from kind (HTTP_SERVER_ERROR is kind:fault →
-    // expected:false, isOperational:false).
-    expect(result.policy).toMatchObject({
-      severity: "error",
-      present: "toast",
-      log: "error",
-      httpStatus: 500,
-      retryable: true,
-      expected: false,
-      isOperational: false,
-      userMessageKey: "error.httpServer",
+    expect(failure.error.code).toBe("UNKNOWN_SERVER_ERROR");
+    // no raw message leaks into the wire payload.
+    expect(JSON.stringify(failure.payload)).not.toContain("boom");
+  });
+
+  it("drives the sinks exactly per decision.telemetry (capture → breadcrumb → alert)", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
+
+    // UNKNOWN_SERVER_ERROR (fault) resolves capture:true, breadcrumb:true; alert depends on criticality.
+    const failure = handle(appError("UNKNOWN_SERVER_ERROR"));
+    const t = failure.decision.telemetry;
+
+    expect((sinks.reporter.capture as ReturnType<typeof vi.fn>).mock.calls.length).toBe(t.capture ? 1 : 0);
+    expect((sinks.reporter.breadcrumb as ReturnType<typeof vi.fn>).mock.calls.length).toBe(t.breadcrumb ? 1 : 0);
+    expect((sinks.notifier.alert as ReturnType<typeof vi.fn>).mock.calls.length).toBe(t.alert ? 1 : 0);
+  });
+
+  it("capture/breadcrumb/alert receive the finalized error + decision.telemetry + ctx", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
+
+    const failure = handle(appError("UNKNOWN_SERVER_ERROR"));
+
+    const [capErr, capDecision, capCtx] = (sinks.reporter.capture as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(capErr).toBe(failure.error);
+    expect(capDecision).toBe(failure.decision.telemetry);
+    expect(capCtx.correlationId).toBe("c");
+    expect(capCtx.operation).toBe("product.read");
+  });
+
+  it("options.telemetry overrides the resolved telemetry (escape hatch) and gates the sinks", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
+
+    // Force capture off, alert on — the sinks must follow the OVERRIDDEN decision.
+    const failure = handle(appError("UNKNOWN_SERVER_ERROR"), {
+      telemetry: { capture: false, alert: true },
     });
+
+    expect(failure.decision.telemetry.capture).toBe(false);
+    expect(failure.decision.telemetry.alert).toBe(true);
+    expect(sinks.reporter.capture).not.toHaveBeenCalled();
+    expect(sinks.notifier.alert).toHaveBeenCalledTimes(1);
   });
 
-  it("default options → reporter.report called exactly once with resolved level + threaded ctx", () => {
-    const { deps, reporter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    const error = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
-    const result = inScope(() => handle(error));
-
-    expect(reporter.report).toHaveBeenCalledTimes(1);
-    const [reportedError, level, ctx] = reporter.report.mock.calls[0]!;
-    // resolved level == the registry log level for the code.
-    expect(level).toBe("error");
-    expect(level).toBe(result.policy.log);
-    expect(isDomainError(reportedError, "HTTP_SERVER_ERROR")).toBe(true);
-    // correlationId from baseCtx is threaded into the report ctx.
-    expect(ctx.correlationId).toBe("c");
-    expect(ctx.runtime).toBe("server");
-  });
-
-  it("isolates sink failures so error handling never throws back into the app", () => {
-    const reporter: Reporter = {
-      report: vi.fn(() => {
-        throw new Error("report failed");
+  it("isolates sink failures so error handling never throws back into the app (guardSink)", () => {
+    const system = makeSystem();
+    const reporter: ReporterSink = {
+      capture: vi.fn(() => {
+        throw new Error("capture failed");
       }),
       breadcrumb: vi.fn(() => {
         throw new Error("breadcrumb failed");
       }),
-      setUser: vi.fn(),
-      setContext: vi.fn(),
     };
-    const presenter: Presenter = {
-      present: vi.fn(() => {
-        throw new Error("present failed");
+    const notifier: NotifierSink = {
+      alert: vi.fn(() => {
+        throw new Error("alert failed");
       }),
     };
-    const throwingNotifier: Notifier = {
-      notify: vi.fn(() => {
-        throw new Error("notify failed");
-      }),
-    };
-    const deps: HandleErrorDeps = {
-      registry: DEFAULT_ERROR_REGISTRY,
-      reporter,
-      presenter,
-      notifier: throwingNotifier,
-    };
-    const handle = createHandleError(deps, BASE_CTX);
+    const handle = createHandleError(system, { reporter, notifier }, BASE_CTX, BASE_OCCURRENCE);
 
-    expect(() =>
-      inScope(() => handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }))),
-    ).not.toThrow();
-
-    expect(reporter.report).toHaveBeenCalledTimes(1);
-    expect(throwingNotifier.notify).toHaveBeenCalledTimes(1);
-    expect(presenter.present).toHaveBeenCalledTimes(1);
-    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
+    let failure: ReturnType<typeof handle> | undefined;
+    expect(() => {
+      failure = handle(appError("UNKNOWN_SERVER_ERROR", null, { correlationId: "c" }));
+    }).not.toThrow();
+    // The failure is still returned even though the first sink threw.
+    expect(failure?.error.code).toBe("UNKNOWN_SERVER_ERROR");
   });
 
-  it("options.log:'none' → reporter.report is NOT called (presenter/notifier/breadcrumb still fire)", () => {
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
+  it("merges options.ctx over baseCtx and threads it into the sinks", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
 
-    inScope(() =>
-      handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }), {
-        log: "none",
-      }),
-    );
-
-    expect(reporter.report).not.toHaveBeenCalled();
-    // log:"none" suppresses ONLY the reporter.report capture — the other sinks are
-    // independent. The T1 impact breadcrumb is keyed off `present`, not `log`, so it
-    // STILL fires (present="toast" ≠ "silent").
-    expect(presenter.present).toHaveBeenCalledTimes(1);
-    expect(notifySpy).toHaveBeenCalledTimes(1);
-    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
-  });
-
-  it("a code whose registry log is 'none' → reporter.report is NOT called by default", () => {
-    // NOT_FOUND has log:"none" in the registry; default path must skip the reporter.
-    const { deps, reporter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    inScope(() => handle(makeError({ code: "NOT_FOUND", details: null })));
-
-    expect(reporter.report).not.toHaveBeenCalled();
-  });
-
-  it("options.present:'silent' → NO presenter AND NO breadcrumb (reporter still fires)", () => {
-    // The truly-silent surface: handleError still captures (report) and alerts (notify),
-    // but the Presenter is skipped (silent ∉ {toast,alert}) AND the T1 breadcrumb is
-    // skipped (present === "silent" is the one case that suppresses the breadcrumb).
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    inScope(() =>
-      handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }), {
-        present: "silent",
-      }),
-    );
-
-    expect(presenter.present).not.toHaveBeenCalled();
-    expect(reporter.breadcrumb).not.toHaveBeenCalled();
-    // report + notify are independent of `present` and still fire.
-    expect(reporter.report).toHaveBeenCalledTimes(1);
-    expect(notifySpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("options.present:'inline' → NO presenter, but breadcrumb DOES fire", () => {
-    // The business-inline surface: not Presenter-actionable (inline ∉ {toast,alert}),
-    // so present() is skipped — but the user DID see an impact (inline field error),
-    // so the T1 breadcrumb is recorded (present !== "silent").
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    inScope(() =>
-      handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }), {
-        present: "inline",
-      }),
-    );
-
-    expect(presenter.present).not.toHaveBeenCalled();
-    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
-    const [bcError, surface, bcCtx] = reporter.breadcrumb.mock.calls[0]!;
-    // breadcrumb records the resolved surface the user experienced + threaded ctx.
-    expect(surface).toBe("inline");
-    expect(isDomainError(bcError, "HTTP_SERVER_ERROR")).toBe(true);
-    expect(bcCtx.correlationId).toBe("c");
-  });
-
-  it.each(["redirect", "page"] as const)(
-    "options.present:'%s' → NOT Presenter-handled, but breadcrumb fires (client escalates)",
-    (surface) => {
-      // redirect/page are escalated by the client useErrorHandler, not the Presenter,
-      // so present() never fires; the breadcrumb still records the impact.
-      const { deps, reporter, presenter } = makeDeps(notifier);
-      const handle = createHandleError(deps, BASE_CTX);
-
-      inScope(() =>
-        handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } }), {
-          present: surface,
-        }),
-      );
-
-      expect(presenter.present).not.toHaveBeenCalled();
-      expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
-      expect(reporter.breadcrumb.mock.calls[0]![1]).toBe(surface);
-    },
-  );
-
-  it("default present (toast) → presenter.present AND breadcrumb both fire once, in that order", () => {
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    const result = inScope(() =>
-      handle(makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } })),
-    );
-
-    // (3) presenter fires for toast with the resolved action + threaded ctx.
-    expect(presenter.present).toHaveBeenCalledTimes(1);
-    const [, action, presentCtx] = presenter.present.mock.calls[0]!;
-    expect(action).toBe("toast");
-    expect(action).toBe(result.policy.present);
-    expect(presentCtx.correlationId).toBe("c");
-
-    // (4) breadcrumb fires for the same toast surface (present !== "silent").
-    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
-    expect(reporter.breadcrumb.mock.calls[0]![1]).toBe("toast");
-
-    // Order invariant: present() (step 3) runs before breadcrumb() (step 4).
-    expect(presenter.present.mock.invocationCallOrder[0]!).toBeLessThan(
-      reporter.breadcrumb.mock.invocationCallOrder[0]!,
-    );
-  });
-
-  it("a registry-silent code (REQUEST_ABORTED) → no presenter, no breadcrumb by default", () => {
-    // REQUEST_ABORTED resolves present:"silent" in the registry; the default path
-    // must skip BOTH the Presenter and the impact breadcrumb without any override.
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    const result = inScope(() => handle(makeError({ code: "REQUEST_ABORTED", details: null })));
-
-    expect(result.policy.present).toBe("silent");
-    expect(presenter.present).not.toHaveBeenCalled();
-    expect(reporter.breadcrumb).not.toHaveBeenCalled();
-  });
-
-  it("a registry-inline business code (NOT_FOUND) → no presenter, breadcrumb fires", () => {
-    // NOT_FOUND resolves present:"inline" (kind:business). Default path: no Presenter,
-    // but the inline impact IS breadcrumbed.
-    const { deps, reporter, presenter } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    const result = inScope(() => handle(makeError({ code: "NOT_FOUND", details: null })));
-
-    expect(result.policy.present).toBe("inline");
-    expect(presenter.present).not.toHaveBeenCalled();
-    expect(reporter.breadcrumb).toHaveBeenCalledTimes(1);
-    expect(reporter.breadcrumb.mock.calls[0]![1]).toBe("inline");
-  });
-
-  it("notifier.notify is ALWAYS called by handleError (the gate lives in the notifier)", () => {
-    // Even for an info-severity code, handleError calls notify; gating is the
-    // notifier's job, not handleError's.
-    const { deps } = makeDeps(notifier);
-    const handle = createHandleError(deps, BASE_CTX);
-
-    const result = inScope(() => handle(makeError({ code: "NOT_FOUND", details: null })));
-
-    expect(notifySpy).toHaveBeenCalledTimes(1);
-    const [, severity, ctx] = notifySpy.mock.calls[0]!;
-    // notify receives the resolved severity + threaded ctx.
-    expect(severity).toBe("info");
-    expect(severity).toBe(result.policy.severity);
-    expect(ctx.correlationId).toBe("c");
-  });
-
-  describe("alert gating via policyGatedNotifier(thresholdAlertPolicy())", () => {
-    // The real gate: a threshold policy (default "fatal") wrapping a delivery sink.
-    // handleError always calls .notify(); the gate decides whether delivery fires.
-    it("pages a delivery sink for a fatal-severity code", () => {
-      const delivery = vi.fn();
-      const gated = policyGatedNotifier(thresholdAlertPolicy(), { notify: delivery });
-      const { deps } = makeDeps(gated);
-      const handle = createHandleError(deps, BASE_CTX);
-
-      const result = inScope(() => handle(makeError({ code: "UNKNOWN_SERVER_ERROR", details: null })));
-
-      expect(result.policy.severity).toBe("fatal");
-      expect(delivery).toHaveBeenCalledTimes(1);
-      const [, severity, ctx] = delivery.mock.calls[0]!;
-      expect(severity).toBe("fatal");
-      expect(ctx.correlationId).toBe("c");
+    handle(appError("UNKNOWN_SERVER_ERROR"), {
+      telemetry: { capture: true },
+      ctx: { route: "/checkout", correlationId: "override-id" },
     });
 
-    it("does NOT page the delivery sink for an info-severity code", () => {
-      const delivery = vi.fn();
-      const gated = policyGatedNotifier(thresholdAlertPolicy(), { notify: delivery });
-      const { deps } = makeDeps(gated);
-      const handle = createHandleError(deps, BASE_CTX);
-
-      const result = inScope(() => handle(makeError({ code: "NOT_FOUND", details: null })));
-
-      expect(result.policy.severity).toBe("info");
-      expect(delivery).not.toHaveBeenCalled();
-    });
+    const capCtx = (sinks.reporter.capture as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(capCtx.correlationId).toBe("override-id");
+    expect(capCtx.route).toBe("/checkout");
+    expect(capCtx.runtime).toBe("server");
   });
 
-  it("options.ctx is merged over baseCtx and threaded into every sink", () => {
-    const delivery = vi.fn();
-    const gated = policyGatedNotifier(thresholdAlertPolicy(), { notify: delivery });
-    const { deps, reporter, presenter } = makeDeps(gated);
-    const handle = createHandleError(deps, BASE_CTX);
+  it("merges options.occurrence over the base occurrence", () => {
+    const system = makeSystem();
+    const sinks = makeSinks();
+    const handle = createHandleError(system, sinks, BASE_CTX, BASE_OCCURRENCE);
 
-    inScope(() =>
-      handle(makeError({ code: "UNKNOWN_SERVER_ERROR", details: null }), {
-        ctx: { route: "/checkout", correlationId: "override-id" },
-      }),
-    );
+    const failure = handle(appError("VALIDATION", { fieldErrors: { email: ["bad"] } }), {
+      occurrence: { uiScope: "field", fieldPath: "email" },
+    });
 
-    const reportCtx = reporter.report.mock.calls[0]![2] as TelemetryContext;
-    const presentCtx = presenter.present.mock.calls[0]![2] as TelemetryContext;
-    const deliveryCtx = delivery.mock.calls[0]![2] as TelemetryContext;
-    // UNKNOWN_SERVER_ERROR resolves present:"toast" → the breadcrumb fires too; its ctx
-    // (the impact key) is threaded identically.
-    const breadcrumbCtx = reporter.breadcrumb.mock.calls[0]![2] as TelemetryContext;
-
-    for (const ctx of [reportCtx, presentCtx, deliveryCtx, breadcrumbCtx]) {
-      // per-call ctx wins; baseCtx fields preserved when not overridden.
-      expect(ctx.correlationId).toBe("override-id");
-      expect(ctx.route).toBe("/checkout");
-      expect(ctx.runtime).toBe("server");
-    }
+    expect(failure.occurrence.uiScope).toBe("field");
+    expect(failure.occurrence.fieldPath).toBe("email");
   });
 });

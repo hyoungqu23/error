@@ -9,15 +9,15 @@
 // makeError — the single creation path.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DomainError, isDomainError, type SerializedError } from "@/error/app-error";
+import { AppError, isAppError, type SerializedError } from "@/error/decision/app-error";
 import { makeError } from "@/error/make-error";
-import { normalizeToDomainError } from "@/error/normalize";
+import { normalizeToAppError } from "@/error/normalize";
 import { getRuntime } from "@/error/runtime";
 
-// Compare two DomainErrors on their observable, serialization-stable surface.
+// Compare two AppErrors on their observable, serialization-stable surface.
 // (We deliberately avoid expect(err).toEqual(err2) on the class instances —
 // Error carries a non-deterministic stack; the wire contract is toSerialized().)
-const wire = (e: DomainError): SerializedError => e.toSerialized();
+const wire = (e: AppError): SerializedError => e.toSerialized();
 
 describe("§10.1 rehydration round-trip — serialization-safe identity", () => {
   afterEach(() => {
@@ -31,8 +31,8 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
       correlationId: "corr-validation",
     });
 
-    const direct = normalizeToDomainError(err);
-    const rehydrated = normalizeToDomainError(err.toSerialized());
+    const direct = normalizeToAppError(err);
+    const rehydrated = normalizeToAppError(err.toSerialized());
 
     // Identity across the wire: both paths converge on the same observable shape.
     expect(wire(rehydrated)).toEqual(wire(direct));
@@ -50,8 +50,8 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
       correlationId: "corr-nf",
     });
 
-    const direct = normalizeToDomainError(err);
-    const rehydrated = normalizeToDomainError(err.toSerialized());
+    const direct = normalizeToAppError(err);
+    const rehydrated = normalizeToAppError(err.toSerialized());
 
     expect(wire(rehydrated)).toEqual(wire(direct));
     expect(rehydrated.code).toBe("NOT_FOUND");
@@ -65,8 +65,8 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
       correlationId: "corr-500",
     });
 
-    const direct = normalizeToDomainError(err);
-    const rehydrated = normalizeToDomainError(err.toSerialized());
+    const direct = normalizeToAppError(err);
+    const rehydrated = normalizeToAppError(err.toSerialized());
 
     expect(wire(rehydrated)).toEqual(wire(direct));
     expect(rehydrated.code).toBe("HTTP_SERVER_ERROR");
@@ -81,7 +81,7 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
     });
 
     const overWire: SerializedError = JSON.parse(JSON.stringify(err.toSerialized()));
-    const rehydrated = normalizeToDomainError(overWire);
+    const rehydrated = normalizeToAppError(overWire);
 
     expect(rehydrated.toSerialized()).toEqual(err.toSerialized());
     // omit-undefined contract: no correlationId/digest ghost keys when absent.
@@ -91,7 +91,7 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
     expect("digest" in bare).toBe(false);
   });
 
-  it("DomainError.fromSerialized preserves code, correlationId and digest", () => {
+  it("AppError.fromSerialized preserves code, correlationId and digest", () => {
     const payload: SerializedError = {
       code: "NOT_FOUND",
       message: "no such row",
@@ -100,9 +100,9 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
       digest: "digest-abc123",
     };
 
-    const rebuilt = DomainError.fromSerialized(payload);
+    const rebuilt = AppError.fromSerialized(payload);
 
-    expect(isDomainError(rebuilt)).toBe(true);
+    expect(isAppError(rebuilt)).toBe(true);
     expect(rebuilt.code).toBe("NOT_FOUND");
     expect(rebuilt.details).toEqual({ resource: "order" });
     expect(rebuilt.correlationId).toBe("corr-from");
@@ -123,16 +123,20 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
     const serialized = err.toSerialized();
     expect(serialized.digest).toBe("rsc-digest-42");
 
-    const rebuilt = DomainError.fromSerialized(serialized);
+    const rebuilt = AppError.fromSerialized(serialized);
     expect(rebuilt.digest).toBe("rsc-digest-42");
     expect(rebuilt.correlationId).toBe("corr-digest");
     // digest survives a full wire trip through normalize as well.
-    const viaNormalize = normalizeToDomainError(JSON.parse(JSON.stringify(serialized)));
+    const viaNormalize = normalizeToAppError(JSON.parse(JSON.stringify(serialized)));
     expect(viaNormalize.digest).toBe("rsc-digest-42");
   });
 
-  it("a corrupt/forged details payload falls back to UNKNOWN but still carries the support trail", () => {
-    // details that violate the per-code schema (NOT_FOUND wants object|null, not a number).
+  it("a corrupt/forged details payload rehydrates verbatim (validity gating moved to finalize, D1)", () => {
+    // P3b-ii: AppError.fromSerialized is a pure rebuild — it no longer re-validates details
+    // against a per-code zod schema. Invalid/forged details are caught later at finalize time
+    // via the catalog's `validateDetails` (D1), which degrades to the safe fallback fault so
+    // a bad payload never reaches the client allowlist. fromSerialized just preserves the
+    // wire shape (code + correlationId + digest + details) so the support trail survives.
     const forged: SerializedError = {
       code: "NOT_FOUND",
       message: "tampered",
@@ -141,10 +145,11 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
       digest: "digest-forged",
     };
 
-    const rebuilt = DomainError.fromSerialized(forged);
+    const rebuilt = AppError.fromSerialized(forged);
 
-    // node runtime → UNKNOWN_SERVER_ERROR, but correlationId + digest survive.
-    expect(rebuilt.code).toBe("UNKNOWN_SERVER_ERROR");
+    // The code/correlationId/digest survive; details are preserved as-is (gated downstream).
+    expect(rebuilt.code).toBe("NOT_FOUND");
+    expect(rebuilt.details).toBe(12345);
     expect(rebuilt.correlationId).toBe("corr-forged");
     expect(rebuilt.digest).toBe("digest-forged");
   });
@@ -152,7 +157,7 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
   it("a plain Error → UNKNOWN_SERVER_ERROR in node, stamping the supplied correlationId", () => {
     expect(getRuntime()).toBe("server");
 
-    const rebuilt = normalizeToDomainError(new Error("boom"), "fallback msg", "corr-plain");
+    const rebuilt = normalizeToAppError(new Error("boom"), "fallback msg", "corr-plain");
 
     expect(rebuilt.code).toBe("UNKNOWN_SERVER_ERROR");
     expect(rebuilt.correlationId).toBe("corr-plain");
@@ -163,7 +168,7 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
     vi.stubGlobal("window", {});
     expect(getRuntime()).toBe("client");
 
-    const rebuilt = normalizeToDomainError(new Error("boom"));
+    const rebuilt = normalizeToAppError(new Error("boom"));
 
     expect(rebuilt.code).toBe("UNKNOWN_CLIENT_ERROR");
   });
@@ -173,15 +178,15 @@ describe("§10.1 rehydration round-trip — serialization-safe identity", () => 
     expect(err.correlationId).toBeUndefined();
 
     // Branch 1: instance passes through. correlationId absent → stamped from ctx.
-    const stamped = normalizeToDomainError(err, undefined, "ctx-corr");
-    expect(isDomainError(stamped)).toBe(true);
+    const stamped = normalizeToAppError(err, undefined, "ctx-corr");
+    expect(isAppError(stamped)).toBe(true);
     expect(stamped.code).toBe("NOT_FOUND");
     expect(stamped.correlationId).toBe("ctx-corr");
 
     // An instance that already carries a correlationId is returned untouched
     // (same reference — no rebuild).
     const withId = makeError({ code: "NOT_FOUND", details: null, correlationId: "own-corr" });
-    const passedThrough = normalizeToDomainError(withId, undefined, "ctx-corr");
+    const passedThrough = normalizeToAppError(withId, undefined, "ctx-corr");
     expect(passedThrough).toBe(withId);
     expect(passedThrough.correlationId).toBe("own-corr");
   });

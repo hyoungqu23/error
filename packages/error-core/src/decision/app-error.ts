@@ -48,9 +48,20 @@ export class AppError<C extends string = string> extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** 내부 직렬화(서버 로그용) — message + ungated details 유지. 클라 전송에는 toClientErrorPayload 사용. */
+  /**
+   * 내부 직렬화(서버 로그용) — message + ungated details 유지. 클라 전송에는 toClientErrorPayload 사용.
+   * undefined 키는 생략해 JSON.parse(JSON.stringify(...)) 라운드트립이 구조적으로 동일하고
+   * 테스트 deep-equality가 정확하다(correlationId/digest/retryAfterMs ghost 키 없음).
+   */
   toSerialized(): SerializedError {
-    return { code: this.code, message: this.message, details: this.details, correlationId: this.correlationId, digest: this.digest, retryAfterMs: this.retryAfterMs };
+    return {
+      code: this.code,
+      message: this.message,
+      details: this.details,
+      ...(this.correlationId !== undefined ? { correlationId: this.correlationId } : {}),
+      ...(this.digest !== undefined ? { digest: this.digest } : {}),
+      ...(this.retryAfterMs !== undefined ? { retryAfterMs: this.retryAfterMs } : {}),
+    };
   }
 
   /** 서버-신뢰 wire(SerializedError) → AppError 재수화. correlationId/digest/retryAfterMs 보존. */
@@ -79,3 +90,29 @@ export const isAppError = (value: unknown): value is AppError =>
 
 // (isKnownErrorCode는 codes.ts에서 — 멤버십 가드 D2가 P3b/P3c에서 사용)
 export { isKnownErrorCode };
+
+/**
+ * 서버-신뢰 wire(SerializedError) 가드 — 코드 known 여부를 정적 frozen code-set으로 판정한다
+ * (ALS-읽는 getActiveErrorRegistry를 쓰지 않음, D2). normalizeToAppError 분기 2가 사용.
+ */
+export const isSerializedError = (e: unknown): e is SerializedError =>
+  typeof e === "object" &&
+  e !== null &&
+  "code" in e &&
+  "message" in e &&
+  typeof (e as SerializedError).code === "string" &&
+  isKnownErrorCode((e as SerializedError).code);
+
+/**
+ * 클라-신뢰 wire(ClientErrorPayload) 가드 — messageKey 보유 + message 부재 + known code(D2).
+ * 정적 code-set 사용(ALS 불사용). normalizeToAppError 분기 2b가 사용.
+ */
+export const isClientErrorPayload = (e: unknown): e is ClientErrorPayload =>
+  typeof e === "object" &&
+  e !== null &&
+  "code" in e &&
+  "messageKey" in e &&
+  !("message" in e) &&
+  typeof (e as ClientErrorPayload).code === "string" &&
+  typeof (e as ClientErrorPayload).messageKey === "string" &&
+  isKnownErrorCode((e as ClientErrorPayload).code);

@@ -424,4 +424,14 @@ describe("createDecisionSystem per-code typed fail (P3a, B1)", () => {
     expect(draft.code).toBe("VALIDATION");
     expect(draft.details).toEqual({ fieldErrors: { email: ["bad"] } });
   });
+
+  it("rejects the wrong details shape per code at compile time (D1 active via validateDetails)", () => {
+    // VALIDATION's catalog validateDetails guard makes DetailsOf<…,"VALIDATION"> =
+    // { fieldErrors: Record<string,string[]> }. A mismatched shape is a TYPE error.
+    // @ts-expect-error — { wrong: true } is not the VALIDATION details shape.
+    sys.fail("VALIDATION", { wrong: true });
+    // @ts-expect-error — RATE_LIMITED requires { retryAfterMs: number }.
+    sys.fail("RATE_LIMITED", { retryAfterMs: "soon" });
+    expect(true).toBe(true);
+  });
 });

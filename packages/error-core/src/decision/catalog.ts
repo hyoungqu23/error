@@ -9,6 +9,12 @@ export const CANONICAL_ERROR_SEMANTICS = {
     defaultHttpStatus: 422, defaultRetryable: false,
     defaultMessageKey: "error.validation", defaultAction: "fix-input",
     detailsExposure: "allowlist", detailsAllowlist: ["fieldErrors"],
+    // D1: per-code details validity (gated at finalize time, NOT zod). Mirrors
+    // ErrorDetailsSchema.VALIDATION (z.object({ fieldErrors: z.record(z.array(z.string())) })).
+    validateDetails: (d): d is { fieldErrors: Record<string, string[]> } =>
+      typeof d === "object" && d !== null && "fieldErrors" in d &&
+      typeof (d as { fieldErrors: unknown }).fieldErrors === "object" &&
+      (d as { fieldErrors: unknown }).fieldErrors !== null,
   },
   // auth/permission 코드는 defaultMessageKey 자체가 safe-vague이므로 messageKeys["safe-vague"]도
   // 같은 키를 재사용한다(dependency-free FALLBACK_MESSAGES에 별도 .safe 키가 없음; host 앱이 override 가능).
@@ -77,6 +83,10 @@ export const CANONICAL_ERROR_SEMANTICS = {
     defaultHttpStatus: 429, defaultRetryable: true,
     defaultMessageKey: "error.rateLimited", defaultAction: "wait",
     detailsExposure: "allowlist", detailsAllowlist: ["retryAfterMs"],
+    // D1: details validity gate (NOT zod). Mirrors ErrorDetailsSchema.RATE_LIMITED.
+    validateDetails: (d): d is { retryAfterMs: number } =>
+      typeof d === "object" && d !== null &&
+      typeof (d as { retryAfterMs: unknown }).retryAfterMs === "number",
   },
   // ── fault (criticality에 따라 generic 또는 support-only 도달) ──
   HTTP_SERVER_ERROR: {

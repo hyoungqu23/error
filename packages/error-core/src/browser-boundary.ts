@@ -9,16 +9,12 @@ export const initBrowserBoundary = (): (() => void) => {
   if (typeof window === "undefined") return () => {};
 
   const onError = (event: ErrorEvent): void => {
-    void handleError(event.error ?? new Error("Unhandled (window.onerror)"), {
-      present: "toast",
-      log: "error",
+    handleError(event.error ?? new Error("Unhandled (window.onerror)"), {
       ctx: { route: "window.onerror" },
     });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
-    void handleError(event.reason ?? new Error("Unhandled rejection"), {
-      present: "toast",
-      log: "error",
+    handleError(event.reason ?? new Error("Unhandled rejection"), {
       ctx: { route: "window.onunhandledrejection" },
     });
   };
