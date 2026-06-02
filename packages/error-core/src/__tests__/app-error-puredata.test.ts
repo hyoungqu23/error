@@ -41,5 +41,6 @@ describe("AppError (pure data)", () => {
     expect(back.code).toBe("RATE_LIMITED");
     expect(back.correlationId).toBe("c");
     expect(back.digest).toBe("dg");
+    expect(back.retryAfterMs).toBe(2000);
   });
 });
