@@ -115,14 +115,32 @@ export interface RuntimeContext {
   traceId?: string;
 }
 
+/** i18n 보간 인자. translator.ts의 TranslateVars와 구조 동일(순환 import 회피). */
+export type TranslateVars = Record<string, string | number>;
+
 export interface UserErrorDecision {
   surface: ErrorSurface;
   disclosure: DisclosureLevel;
   messageKey: string;
+  messageVars?: TranslateVars; // §5.4 — 보간 인자(render-time 도출; D5)
   action: UserAction;
   target?: string;
   supportCode?: string;
   retryAfterMs?: number;
+}
+
+/** 서버→클라 경계를 넘는 단 하나의 DTO(§5.3). surface/target은 절대 싣지 않는다. */
+export interface ClientErrorPayload {
+  code: string;
+  messageKey: string;
+  messageVars?: TranslateVars;
+  disclosure: DisclosureLevel;
+  action: UserAction; // §5.3: required
+  supportCode?: string;
+  retryAfterMs?: number;
+  correlationId?: string; // 구 error-core 보존
+  digest?: string; // RSC 경계용 보존
+  details?: unknown; // 단일 allowlist 통과분만
 }
 
 export interface ErrorDecision {
