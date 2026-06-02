@@ -21,16 +21,6 @@ export interface ErrorDecisionInput {
   runtime: RuntimeContext;
 }
 
-const pickAllowlistedDetails = (details: unknown, allowlist: readonly string[] | undefined): unknown => {
-  if (!allowlist?.length || typeof details !== "object" || details === null) return undefined;
-  const source = details as Record<string, unknown>;
-  const picked: Record<string, unknown> = {};
-  for (const key of allowlist) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) picked[key] = source[key];
-  }
-  return Object.keys(picked).length > 0 ? picked : undefined;
-};
-
 const resolveDisclosure = (semantics: ErrorSemantics, occurrence: OccurrenceContext): DisclosureLevel => {
   if (occurrence.resource) {
     const resourceDisclosure = semantics.disclosureByResource?.[occurrence.resource];
@@ -61,7 +51,7 @@ const resolveDisclosure = (semantics: ErrorSemantics, occurrence: OccurrenceCont
 };
 
 const resolveSurface = (
-  error: DecisionError,
+  _error: DecisionError,
   semantics: ErrorSemantics,
   occurrence: OccurrenceContext,
   action: UserAction,
