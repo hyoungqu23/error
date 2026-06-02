@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 
 import { fieldErrorsFromError } from "@/error/field-errors";
 import { makeError } from "@/error/make-error";
+import { appError } from "@/error/decision/app-error";
 
 describe("fieldErrorsFromError (G12)", () => {
   it("returns the fieldErrors map for a VALIDATION DomainError", () => {
@@ -34,5 +35,13 @@ describe("fieldErrorsFromError (G12)", () => {
     expect(fieldErrorsFromError(null)).toBeNull();
     expect(fieldErrorsFromError(undefined)).toBeNull();
     expect(fieldErrorsFromError({ code: "VALIDATION" })).toBeNull(); // plain object, not an instance
+  });
+
+  it("extracts fieldErrors from a NEW AppError too (P3b-i)", () => {
+    const e = appError("VALIDATION", { fieldErrors: { email: ["bad"] } });
+    expect(fieldErrorsFromError(e)).toEqual({ email: ["bad"] });
+  });
+  it("returns null for AppError of another code", () => {
+    expect(fieldErrorsFromError(appError("NOT_FOUND"))).toBeNull();
   });
 });
