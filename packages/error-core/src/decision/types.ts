@@ -1,5 +1,6 @@
 // error-core/decision/types.ts — 결정 어휘(순수 데이터 타입). DomainError/React/Next 무관.
-// 출처: error-decision-system/src/index.ts:1-133 (ReporterSink/NotifierSink 제외)
+// 출처: error-decision-system/src/index.ts:1-133
+import type { AppError } from "./app-error";
 
 export type ErrorCategory = "business" | "operational" | "fault";
 
@@ -150,3 +151,14 @@ export interface ErrorDecision {
 
 export type ErrorCatalog = Record<string, ErrorSemantics>;
 export type OperationCatalog = Record<string, OperationMeta>;
+
+export interface TelemetryContext extends RuntimeContext {
+  operation: string;
+}
+export interface ReporterSink {
+  capture(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext): void;
+  breadcrumb(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext): void;
+}
+export interface NotifierSink {
+  alert(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext): void;
+}
