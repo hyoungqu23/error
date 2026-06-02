@@ -337,6 +337,19 @@ describe("createDecisionSystem (P3a)", () => {
     expect(finalized.decision.user.disclosure).toBe("support-only");
     expect(finalized.decision.user.supportCode).toBe("corr-1");
   });
+
+  it("promotes AppError.correlationId to supportCode when runtime lacks it", () => {
+    const finalized = sys.finalizeUnknown(
+      appError("SCHEMA_MISMATCH", {}, { correlationId: "from-error" }),
+      { operation: "product.read", interaction: "query", uiScope: "page", criticality: "core" },
+      { runtime: "server" }, // no correlationId in runtime
+    );
+    expect(finalized.ok).toBe(false);
+    if (!finalized.ok) {
+      expect(finalized.decision.user.supportCode).toBe("from-error");
+      expect(finalized.payload.correlationId).toBe("from-error");
+    }
+  });
 });
 
 describe("createDecisionSystem telemetry execution (P3a)", () => {

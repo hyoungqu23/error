@@ -273,7 +273,11 @@ export const createDecisionSystem = <
     occurrence: OccurrenceContext,
     runtime: Partial<RuntimeContext> = {},
   ): DecisionFailure<C> => {
-    const resolvedRuntime: RuntimeContext = { runtime: defaultRuntime, ...runtime };
+    const resolvedRuntime: RuntimeContext = {
+      runtime: defaultRuntime,
+      ...(error.correlationId !== undefined ? { correlationId: error.correlationId } : {}),
+      ...runtime, // explicit runtime arg wins over the error's correlationId
+    };
     const mergedOccurrence = { ...occurrence, ...error.occurrence };
     const semantics = lookupSemantics(error.code);
     // D1: per-code details validity gated here at finalize time via `semantics.validateDetails`
