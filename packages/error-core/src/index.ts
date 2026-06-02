@@ -98,3 +98,4 @@ export { toErrorResponse } from "./route-handler";
 export { initHandleError, handleError, setErrorUser } from "./handler";
 export { safeHandler } from "./safe-handler";
 export { initBrowserBoundary } from "./browser-boundary";
+export * from "./decision";
