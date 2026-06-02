@@ -10,6 +10,8 @@ export const CANONICAL_ERROR_SEMANTICS = {
     defaultMessageKey: "error.validation", defaultAction: "fix-input",
     detailsExposure: "allowlist", detailsAllowlist: ["fieldErrors"],
   },
+  // auth/permission 코드는 defaultMessageKey 자체가 safe-vague이므로 messageKeys["safe-vague"]도
+  // 같은 키를 재사용한다(dependency-free FALLBACK_MESSAGES에 별도 .safe 키가 없음; host 앱이 override 가능).
   INVALID_CREDENTIALS: {
     code: "INVALID_CREDENTIALS", category: "business", sensitivity: "auth",
     defaultHttpStatus: 401, defaultRetryable: false,
@@ -46,9 +48,10 @@ export const CANONICAL_ERROR_SEMANTICS = {
     detailsExposure: "none",
   },
   TIMEOUT: {
-    code: "TIMEOUT", category: "operational", sensitivity: "public",
+    code: "TIMEOUT", category: "operational", sensitivity: "internal",
     defaultHttpStatus: 504, defaultRetryable: true,
     defaultMessageKey: "error.timeout", defaultAction: "retry",
+    messageKeys: { generic: "error.timeout" },
     detailsExposure: "none",
   },
   REQUEST_ABORTED: {
