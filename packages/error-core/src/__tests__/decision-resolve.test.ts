@@ -46,6 +46,7 @@ describe("resolveErrorDecision — scenario matrix (canonical catalog)", () => {
     const d = decide("AUTH_REQUIRED", occ({ interaction: "route-guard", uiScope: "page", criticality: "security" }));
     expect(d.user.surface).toBe("redirect");
     expect(d.user.action).toBe("login");
+    expect(d.user.target).toBe("/login");
   });
 
   it("FORBIDDEN + admin page → page surface, safe-vague, warning capture", () => {
@@ -60,6 +61,8 @@ describe("resolveErrorDecision — scenario matrix (canonical catalog)", () => {
     expect(d.user.surface).toBe("page");
     expect(d.user.disclosure).toBe("support-only");
     expect(d.telemetry.capture).toBe(true);
+    expect(d.telemetry.alert).toBe(true);
+    expect(d.telemetry.level).toBe("fatal");
   });
 
   it("TIMEOUT + non-idempotent checkout submit → dialog surface, wait action, generic disclosure", () => {
