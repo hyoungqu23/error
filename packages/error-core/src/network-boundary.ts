@@ -1,22 +1,13 @@
 // error/network-boundary.ts  — the Network 경계 (변환: raw transport → AppError). THROWING.
 import { z } from "zod";
 import {
-  DomainError,
-  construct,
-  isClientSerializedError,
+  AppError,
+  appError,
+  isClientErrorPayload,
   isSerializedError,
   type SerializedError,
-} from "./app-error";
+} from "./decision/app-error";
 import { parseRetryAfter } from "./retry-after";
-
-// P3b-ii: network-boundary stays on the OLD DomainError stack (its withCorrelation/
-// fromSerialized/isSerializedError path is registry-based) until P3c. Use the old
-// `construct` so produced errors are DomainError, unaffected by makeError → AppError.
-const makeError = (opts: {
-  code: Parameters<typeof construct>[0];
-  details?: unknown;
-  cause?: unknown;
-}): DomainError => construct(opts.code, opts.details ?? null, { cause: opts.cause });
 
 export interface NetworkBoundaryOptions extends Omit<RequestInit, "signal"> {
   /** Zod schema the JSON body is validated against. Parse failure → SCHEMA_MISMATCH. */
@@ -29,7 +20,6 @@ export interface NetworkBoundaryOptions extends Omit<RequestInit, "signal"> {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const REQUEST_ID_HEADER = "x-request-id";
-const CORRELATION_COOKIE = "x-correlation-id"; // seeded by proxy.ts (non-httpOnly)
 const ID_RE = /^[\w-]{8,64}$/;
 
 /** Are we online? Server has no `navigator`; treat absence as "online". */
@@ -56,10 +46,10 @@ const outboundCorrelationId = (): string | undefined => {
   return ID_RE.test(value) ? value : undefined;
 };
 
-/** Stamp a correlationId onto a freshly-made DomainError. */
-const withCorrelation = (err: DomainError, correlationId?: string): DomainError =>
+/** Stamp a correlationId onto a freshly-made AppError. */
+const withCorrelation = (err: AppError, correlationId?: string): AppError =>
   correlationId && !err.correlationId
-    ? DomainError.fromSerialized({ ...err.toSerialized(), correlationId })
+    ? AppError.fromSerialized({ ...err.toSerialized(), correlationId })
     : err;
 
 export async function networkBoundary<T = unknown>(
@@ -70,7 +60,7 @@ export async function networkBoundary<T = unknown>(
 
   // Pre-flight: a known-offline browser never reaches the network — fail fast & specific.
   if (!isOnline()) {
-    throw makeError({ code: "OFFLINE", details: null });
+    throw appError("OFFLINE");
   }
 
   // Compose timeout + caller cancellation. Keep BOTH references so we can discriminate the cause.
@@ -93,17 +83,17 @@ export async function networkBoundary<T = unknown>(
   } catch (cause) {
     // 1. Cancellation/timeout — discriminate by underlying signal state.
     if (timeoutSignal.aborted) {
-      throw makeError({ code: "TIMEOUT", details: null, cause });
+      throw appError("TIMEOUT", null, { cause });
     }
     if (externalSignal?.aborted) {
-      throw makeError({ code: "REQUEST_ABORTED", details: null, cause });
+      throw appError("REQUEST_ABORTED", null, { cause });
     }
     // 2. The connection may have dropped mid-flight — re-check liveness.
     if (!isOnline()) {
-      throw makeError({ code: "OFFLINE", details: null, cause });
+      throw appError("OFFLINE", null, { cause });
     }
     // 3. Any other transport failure (DNS, TLS, CORS, TypeError: Failed to fetch…).
-    throw makeError({ code: "NETWORK_ERROR", details: null, cause });
+    throw appError("NETWORK_ERROR", null, { cause });
   }
 
   const correlationId = correlationFrom(res);
@@ -120,29 +110,31 @@ export async function networkBoundary<T = unknown>(
     // (a) The server spoke our protocol → preserve its chosen code verbatim
     //     (FORBIDDEN / NOT_FOUND / VALIDATION / …). Makes §8.4's inline branch reachable.
     if (isSerializedError(body)) {
-      throw DomainError.fromSerialized(body satisfies SerializedError); // already carries correlationId if server set it
+      throw AppError.fromSerialized(body satisfies SerializedError); // already carries correlationId if server set it
     }
-    if (isClientSerializedError(body)) {
-      throw withCorrelation(DomainError.fromClientSerialized(body), correlationId);
+    if (isClientErrorPayload(body)) {
+      throw withCorrelation(AppError.fromClientSerialized(body), correlationId);
     }
 
     // (b) Opaque error response → map by status class. 429 carries Retry-After.
     const status = res.status;
     if (status === 429) {
       const retryAfterMs = parseRetryAfter(res.headers.get("retry-after"));
+      // D5: thread retryAfterMs onto the instance field AND keep it in allowlisted details.
       throw withCorrelation(
-        makeError({
-          code: "RATE_LIMITED",
-          details: retryAfterMs !== undefined ? { retryAfterMs } : null,
-        }),
+        appError(
+          "RATE_LIMITED",
+          retryAfterMs !== undefined ? { retryAfterMs } : null,
+          retryAfterMs !== undefined ? { retryAfterMs } : {},
+        ),
         correlationId,
       );
     }
-    // Narrow `code` to the concrete HTTP literal so makeError infers the matching
+    // Narrow `code` to the concrete HTTP literal so appError infers the matching
     // `{ status: number }` details shape under strict generics (vs the full union).
     const code: "HTTP_SERVER_ERROR" | "HTTP_CLIENT_ERROR" =
       status >= 500 ? "HTTP_SERVER_ERROR" : "HTTP_CLIENT_ERROR";
-    throw withCorrelation(makeError({ code, details: { status } }), correlationId);
+    throw withCorrelation(appError(code, { status }), correlationId);
   }
 
   // ── Ok: parse the body, validate the shape. ──
@@ -151,7 +143,7 @@ export async function networkBoundary<T = unknown>(
     json = await res.json();
   } catch (cause) {
     throw withCorrelation(
-      makeError({ code: "SCHEMA_MISMATCH", details: { endpoint: String(url) }, cause }),
+      appError("SCHEMA_MISMATCH", { endpoint: String(url) }, { cause }),
       correlationId,
     );
   }
@@ -163,7 +155,7 @@ export async function networkBoundary<T = unknown>(
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     throw withCorrelation(
-      makeError({ code: "SCHEMA_MISMATCH", details: { endpoint: String(url) }, cause: parsed.error }),
+      appError("SCHEMA_MISMATCH", { endpoint: String(url) }, { cause: parsed.error }),
       correlationId,
     );
   }

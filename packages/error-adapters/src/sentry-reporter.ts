@@ -9,9 +9,25 @@ import * as Sentry from "@sentry/nextjs";
 import type { Reporter, TelemetryContext } from "error-core/telemetry";
 import type { DomainError } from "error-core/app-error";
 import type { LogLevel } from "error-core/policy";
-import { gateClientDetails } from "error-core/serialize-client";
+import { CANONICAL_ERROR_SEMANTICS } from "error-core/decision/catalog";
 import { isExpectedCode } from "error-core/app-error";
 import type { ErrorCode } from "error-core/registry";
+
+// P3c: the per-code client-details allowlist moved from the deleted `serialize-client`
+// (gateClientDetails/DETAILS_ALLOWLIST) to the decision-system SSOT `CANONICAL_ERROR_SEMANTICS`
+// (detailsExposure + detailsAllowlist). This local gate redacts the Sentry `details` context by
+// the SAME allowlist that gates the client payload — shallow-pick allowlisted keys, else undefined.
+const gateClientDetails = (code: string, details: unknown): unknown => {
+  const semantics = (CANONICAL_ERROR_SEMANTICS as Record<string, { detailsExposure: string; detailsAllowlist?: readonly string[] }>)[code];
+  const allowlist = semantics?.detailsExposure === "allowlist" ? semantics.detailsAllowlist : undefined;
+  if (!allowlist?.length || typeof details !== "object" || details === null) return undefined;
+  const source = details as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of allowlist) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) picked[key] = source[key];
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
+};
 
 // @sentry/nextjs v8 SeverityLevel is "fatal"|"error"|"warning"|"log"|"info"|"debug".
 // We only emit the four we use; the type is the real Sentry union so scope.setLevel matches.

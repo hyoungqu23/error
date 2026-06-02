@@ -24,8 +24,21 @@ import { z } from "zod";
 
 import { DEFAULT_ERROR_REGISTRY, type ErrorCode } from "@/error/registry";
 import { ErrorDetailsSchema } from "@/error/schema";
-import { DETAILS_ALLOWLIST } from "@/error/serialize-client";
+import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
 import { isExpectedCode } from "@/error/app-error";
+
+// P3c: the per-code client-details allowlist SSOT is now `CANONICAL_ERROR_SEMANTICS[code]`
+// (`detailsExposure` + `detailsAllowlist`), replacing the deleted `DETAILS_ALLOWLIST`. This shim
+// projects the new semantics back to the old rule shape (array of keys | null) so the G1 invariants
+// — allowlist ⊆ schema keys, z.null() codes expose nothing, RATE_LIMITED.retryAfterMs allowlisted —
+// are preserved verbatim against the new source of truth.
+const detailsAllowlistRule = (code: ErrorCode): readonly string[] | null => {
+  const semantics = CANONICAL_ERROR_SEMANTICS[code];
+  return semantics.detailsExposure === "allowlist" ? (semantics.detailsAllowlist ?? []) : null;
+};
+const DETAILS_ALLOWLIST = Object.fromEntries(
+  (Object.keys(DEFAULT_ERROR_REGISTRY) as ErrorCode[]).map((code) => [code, detailsAllowlistRule(code)]),
+) as Record<ErrorCode, readonly string[] | null>;
 
 // Canonical vocabularies (mirror policy.ts / severity.ts). Kept as local
 // literals so the test fails loudly if a registry row drifts to an

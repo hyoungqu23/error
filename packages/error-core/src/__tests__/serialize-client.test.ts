@@ -1,47 +1,54 @@
-// §10 serialization — LEAK-PREVENTION enforcement point (toClientSerialized).
-// Asserts: free-text message is dropped, code/userMessageKey/correlationId kept,
-// details gated by DETAILS_ALLOWLIST, and the DTO is JSON-safe (no class/funcs).
+// §10 / §5.3 — LEAK-PREVENTION enforcement point.
+// P3c: the single leak gate is `system.toClientErrorPayload(error, decision)` (decision/system),
+// driven through `finalizeUnknown(...).payload`. The old per-code DETAILS_ALLOWLIST /
+// gateClientDetails / toClientSerialized free functions were deleted — this file is migrated to
+// exercise the SAME leak invariants against the unified gate, code by code.
+//
+// PRESERVED invariants (NOT weakened):
+//  • raw free-text message NEVER reaches the payload
+//  • cause NEVER reaches the payload
+//  • the payload is JSON-safe (deep round-trips, plain object, no functions)
+//  • non-allowlisted sibling keys are stripped (shallow pick)
+//  • VALIDATION.fieldErrors PASSES (allowlist)
+//  • RATE_LIMITED.retryAfterMs PASSES (allowlist — public Retry-After)
+//  • FORBIDDEN.requiredRole / NOT_FOUND.resource / SCHEMA_MISMATCH.endpoint / HTTP_*.status WITHHELD
+//  • surface/target are ABSENT from the wire payload
+//  • the full AppError (stack/name/cause/occurrence) NEVER serializes
 import { describe, it, expect } from "vitest";
-import {
-  toClientSerialized,
-  gateClientDetails,
-  DETAILS_ALLOWLIST,
-  type ClientSerializedError,
-} from "@/error/serialize-client";
-import { construct, DomainError } from "@/error/app-error";
-import { getRuntime } from "@/error/runtime";
-import { ErrorDetailsSchema } from "@/error/schema";
-import type { ErrorCode } from "@/error/registry";
+import { createDecisionSystem } from "@/error/decision/system";
+import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
+import { appError, AppError } from "@/error/decision/app-error";
+import type { ClientErrorPayload, OccurrenceContext } from "@/error/decision/types";
 
-// P3b-ii: serialize-client + toClientSerialized read the OLD DomainError policy getters
-// (userMessageKey/httpStatus) and stay on the old stack until P3c. The production `makeError`
-// now returns an AppError, so this old-stack test keeps a local DomainError-producing shim
-// (the pre-P3b-ii makeError: zod-validate, else UNKNOWN_* fallback).
-const makeError = (opts: {
-  code: ErrorCode;
-  details?: unknown;
-  message?: string;
-  cause?: unknown;
-  correlationId?: string;
-  digest?: string;
-}): DomainError => {
-  const parsed = ErrorDetailsSchema[opts.code].safeParse(opts.details);
-  if (!parsed.success) {
-    const fallback = getRuntime() === "server" ? "UNKNOWN_SERVER_ERROR" : "UNKNOWN_CLIENT_ERROR";
-    return construct(fallback, null, {
-      message: opts.message ?? "알 수 없는 오류가 발생했습니다.",
-      cause: opts.cause ?? opts.details,
-      correlationId: opts.correlationId,
-      digest: opts.digest,
-    });
-  }
-  return construct(opts.code, parsed.data, {
-    message: opts.message,
-    cause: opts.cause,
-    correlationId: opts.correlationId,
-    digest: opts.digest,
-  });
+// A test decision-system over the canonical catalog. Operations cover the boundaries exercised.
+const sys = createDecisionSystem({
+  errors: CANONICAL_ERROR_SEMANTICS,
+  operations: {
+    "product.read": {
+      operation: "product.read",
+      owner: "catalog",
+      criticality: "core",
+      defaultUiScope: "page",
+      piiRisk: false,
+    },
+  },
+  fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+  validationErrorCode: "VALIDATION",
+});
+
+const OCCURRENCE: OccurrenceContext<"product.read"> = {
+  operation: "product.read",
+  interaction: "query",
+  uiScope: "page",
+  criticality: "core",
 };
+
+/**
+ * Run an AppError (or any thrown value) through the SINGLE leak gate and return the wire payload.
+ * Server runtime — the harshest disclosure for fault codes. correlationId threads to supportCode.
+ */
+const gate = (error: AppError, correlationId = "corr-test"): ClientErrorPayload =>
+  sys.finalizeUnknown(error, OCCURRENCE, { runtime: "server", correlationId }).payload;
 
 // Deep round-trip helper: a value is JSON-safe iff parse(stringify(x)) deep-equals x.
 const jsonRoundTrips = (x: unknown): boolean => {
@@ -57,192 +64,175 @@ const hasNoFunctions = (x: unknown): boolean => {
   return Object.values(x as Record<string, unknown>).every(hasNoFunctions);
 };
 
-describe("toClientSerialized (§10 leak prevention)", () => {
-  it("DROPS the free-text message — no raw server message leaks to the client DTO", () => {
+describe("toClientErrorPayload (§5.3/§10 leak prevention)", () => {
+  it("DROPS the free-text message — no raw server message leaks to the client payload", () => {
     const secret = "DB connection refused at 10.0.0.7: password=hunter2";
-    const err = makeError({
-      code: "HTTP_SERVER_ERROR",
-      details: { status: 500 },
-      message: secret,
-    });
+    const payload = gate(
+      appError("HTTP_SERVER_ERROR", { status: 500 }, { message: secret }),
+    );
 
-    const dto = toClientSerialized(err);
-
-    // No `message` field whatsoever on the client DTO.
-    expect("message" in dto).toBe(false);
-    expect((dto as unknown as Record<string, unknown>).message).toBeUndefined();
+    // No `message` field whatsoever on the client payload.
+    expect("message" in payload).toBe(false);
+    expect((payload as unknown as Record<string, unknown>).message).toBeUndefined();
     // The secret string must not appear anywhere in the serialized payload.
-    expect(JSON.stringify(dto)).not.toContain("hunter2");
-    expect(JSON.stringify(dto)).not.toContain("10.0.0.7");
+    expect(JSON.stringify(payload)).not.toContain("hunter2");
+    expect(JSON.stringify(payload)).not.toContain("10.0.0.7");
   });
 
-  it("keeps code + userMessageKey + correlationId", () => {
-    const err = makeError({
-      code: "VALIDATION",
-      details: { fieldErrors: { email: ["required"] } },
-      correlationId: "corr-123",
-    });
+  it("keeps code + messageKey + correlationId", () => {
+    // The payload's correlationId is threaded off the AppError instance (decision/system:251).
+    const payload = gate(
+      appError("VALIDATION", { fieldErrors: { email: ["required"] } }, { correlationId: "corr-123" }),
+    );
 
-    const dto = toClientSerialized(err);
-
-    expect(dto.code).toBe("VALIDATION");
-    // userMessageKey is read off the active registry (DEFAULT) for VALIDATION.
-    expect(dto.userMessageKey).toBe("error.validation");
-    expect(dto.userMessageKey).toBe(err.userMessageKey);
-    expect(dto.correlationId).toBe("corr-123");
+    expect(payload.code).toBe("VALIDATION");
+    // messageKey is resolved off the catalog (public VALIDATION → default key).
+    expect(payload.messageKey).toBe("error.validation");
+    expect(payload.correlationId).toBe("corr-123");
   });
 
-  it("when correlationId is absent it serializes to undefined and JSON drops it", () => {
-    const err = makeError({
-      code: "VALIDATION",
-      details: { fieldErrors: { name: ["too short"] } },
-    });
+  it("when correlationId is absent the key is omitted and JSON stays clean", () => {
+    // finalizeUnknown threads no correlationId → payload omits the key.
+    const payload = sys.finalizeUnknown(
+      appError("VALIDATION", { fieldErrors: { name: ["too short"] } }),
+      OCCURRENCE,
+      { runtime: "server" },
+    ).payload;
 
-    const dto = toClientSerialized(err);
-
-    // correlationId is assigned unconditionally from the (undefined) instance value,
-    // so the key exists but holds undefined...
-    expect(dto.correlationId).toBeUndefined();
-    // ...and JSON.stringify drops undefined values, so the wire payload is clean.
-    const wire = JSON.parse(JSON.stringify(dto));
+    expect("correlationId" in payload).toBe(false);
+    const wire = JSON.parse(JSON.stringify(payload));
     expect("correlationId" in wire).toBe(false);
-    expect(wire).toEqual({ code: "VALIDATION", userMessageKey: "error.validation", details: { fieldErrors: { name: ["too short"] } } });
+    expect(payload.code).toBe("VALIDATION");
+    expect(payload.details).toEqual({ fieldErrors: { name: ["too short"] } });
   });
 
-  it("threads digest only when provided", () => {
-    const err = makeError({ code: "AUTH_REQUIRED", details: null });
-
-    const withDigest = toClientSerialized(err, "dig-abc");
+  it("threads digest only when present on the error", () => {
+    const withDigest = gate(appError("AUTH_REQUIRED", null, { digest: "dig-abc" }));
     expect(withDigest.digest).toBe("dig-abc");
 
-    const without = toClientSerialized(err);
+    const without = gate(appError("AUTH_REQUIRED", null));
     expect("digest" in without).toBe(false);
   });
 
   it("VALIDATION.fieldErrors is PRESERVED by the allowlist", () => {
     const fieldErrors = { email: ["invalid"], age: ["must be >= 18"] };
-    const err = makeError({ code: "VALIDATION", details: { fieldErrors } });
+    const payload = gate(appError("VALIDATION", { fieldErrors }));
 
-    const dto = toClientSerialized(err);
-
-    expect(dto.details).toBeDefined();
-    expect(dto.details).toEqual({ fieldErrors });
+    expect(payload.details).toBeDefined();
+    expect(payload.details).toEqual({ fieldErrors });
   });
 
   it("shallow-picks ONLY allowlisted keys — non-allowlisted sibling keys are dropped", () => {
-    // Hand-build a DomainError whose details carry an extra (non-allowlisted) key
-    // alongside the allowlisted fieldErrors, to prove the picker drops siblings.
-    // (makeError's schema would reject the extra key, so construct directly here —
-    //  we are testing the GATE, not the schema.)
-    const err = new DomainError({
-      code: "VALIDATION",
-      details: {
+    // details carry an extra (non-allowlisted) key alongside fieldErrors — the picker drops siblings.
+    const payload = gate(
+      appError("VALIDATION", {
         fieldErrors: { email: ["required"] },
-        // not in DETAILS_ALLOWLIST.VALIDATION — must be stripped:
+        // not in the VALIDATION allowlist — must be stripped:
         internalQuery: "SELECT * FROM users WHERE secret=1",
-      } as never,
-    });
+      }),
+    );
 
-    const dto = toClientSerialized(err);
-
-    expect(dto.details).toEqual({ fieldErrors: { email: ["required"] } });
-    expect(JSON.stringify(dto)).not.toContain("internalQuery");
-    expect(JSON.stringify(dto)).not.toContain("SELECT");
+    expect(payload.details).toEqual({ fieldErrors: { email: ["required"] } });
+    expect(JSON.stringify(payload)).not.toContain("internalQuery");
+    expect(JSON.stringify(payload)).not.toContain("SELECT");
   });
 
   it("SCHEMA_MISMATCH.endpoint is DROPPED (leaks internal API topology)", () => {
-    const err = makeError({
-      code: "SCHEMA_MISMATCH",
-      details: { endpoint: "https://internal.api/v2/users" },
-    });
+    // SCHEMA_MISMATCH detailsExposure:'none' → no details at all.
+    expect(CANONICAL_ERROR_SEMANTICS.SCHEMA_MISMATCH.detailsExposure).toBe("none");
+    const payload = gate(appError("SCHEMA_MISMATCH", { endpoint: "https://internal.api/v2/users" }));
 
-    expect(DETAILS_ALLOWLIST.SCHEMA_MISMATCH).toBeNull();
-    const dto = toClientSerialized(err);
-
-    expect("details" in dto).toBe(false);
-    expect(dto.details).toBeUndefined();
-    expect(JSON.stringify(dto)).not.toContain("internal.api");
-    expect(JSON.stringify(dto)).not.toContain("endpoint");
+    expect("details" in payload).toBe(false);
+    expect(payload.details).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain("internal.api");
+    expect(JSON.stringify(payload)).not.toContain("endpoint");
   });
 
-  it("RATE_LIMITED.retryAfterMs is ALLOWLISTED and crosses to the client (G1 — public Retry-After)", () => {
-    // r5/G1: retryAfterMs is the public Retry-After value (non-sensitive) — it
-    // must reach the browser so the countdown copy can interpolate {seconds}.
-    expect(DETAILS_ALLOWLIST.RATE_LIMITED).toEqual(["retryAfterMs"]);
+  it("RATE_LIMITED.retryAfterMs is ALLOWLISTED and crosses to the client (public Retry-After)", () => {
+    // retryAfterMs is the public Retry-After value (non-sensitive) — it must reach the browser.
+    expect(CANONICAL_ERROR_SEMANTICS.RATE_LIMITED.detailsExposure).toBe("allowlist");
+    expect(CANONICAL_ERROR_SEMANTICS.RATE_LIMITED.detailsAllowlist).toEqual(["retryAfterMs"]);
 
-    const err = makeError({ code: "RATE_LIMITED", details: { retryAfterMs: 3000 } });
-    const dto = toClientSerialized(err);
+    const payload = gate(appError("RATE_LIMITED", { retryAfterMs: 3000 }), "corr-rl");
 
-    expect(dto.code).toBe("RATE_LIMITED");
-    expect(dto.userMessageKey).toBe("error.rateLimited");
-    expect(dto.details).toEqual({ retryAfterMs: 3000 });
-    // the gate alone agrees with the full DTO path
-    expect(gateClientDetails("RATE_LIMITED", { retryAfterMs: 3000 })).toEqual({
-      retryAfterMs: 3000,
-    });
+    expect(payload.code).toBe("RATE_LIMITED");
+    expect(payload.messageKey).toBe("error.rateLimited");
+    expect(payload.details).toEqual({ retryAfterMs: 3000 });
     // JSON-safe round-trip with the allowlisted value intact
-    expect(JSON.parse(JSON.stringify(dto)).details).toEqual({ retryAfterMs: 3000 });
+    expect(JSON.parse(JSON.stringify(payload)).details).toEqual({ retryAfterMs: 3000 });
   });
 
-  it("RATE_LIMITED with no retryAfterMs (null details) sends NO details (nothing to pick)", () => {
-    // The schema is `.nullable()` — a RATE_LIMITED with null details has no
-    // allowlisted key present, so the gate omits the field entirely.
-    const err = makeError({ code: "RATE_LIMITED", details: null });
-    const dto = toClientSerialized(err);
-    expect("details" in dto).toBe(false);
-    expect(dto.details).toBeUndefined();
+  it("RATE_LIMITED with null details sends NO details (nothing to pick)", () => {
+    // null details → no allowlisted key present → the gate omits the field entirely.
+    const payload = gate(appError("RATE_LIMITED", null));
+    expect("details" in payload).toBe(false);
+    expect(payload.details).toBeUndefined();
   });
 
   it("HTTP_CLIENT_ERROR.status and HTTP_SERVER_ERROR.status are DROPPED (server-diagnostic)", () => {
-    expect(DETAILS_ALLOWLIST.HTTP_CLIENT_ERROR).toBeNull();
-    expect(DETAILS_ALLOWLIST.HTTP_SERVER_ERROR).toBeNull();
+    expect(CANONICAL_ERROR_SEMANTICS.HTTP_CLIENT_ERROR.detailsExposure).toBe("none");
+    expect(CANONICAL_ERROR_SEMANTICS.HTTP_SERVER_ERROR.detailsExposure).toBe("none");
 
-    const clientErr = makeError({ code: "HTTP_CLIENT_ERROR", details: { status: 418 } });
-    const serverErr = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 503 } });
+    const clientPayload = gate(appError("HTTP_CLIENT_ERROR", { status: 418 }));
+    const serverPayload = gate(appError("HTTP_SERVER_ERROR", { status: 503 }));
 
-    const clientDto = toClientSerialized(clientErr);
-    const serverDto = toClientSerialized(serverErr);
-
-    expect("details" in clientDto).toBe(false);
-    expect("details" in serverDto).toBe(false);
-    expect(JSON.stringify(clientDto)).not.toContain("418");
-    expect(JSON.stringify(serverDto)).not.toContain("503");
+    expect("details" in clientPayload).toBe(false);
+    expect("details" in serverPayload).toBe(false);
+    expect(JSON.stringify(clientPayload)).not.toContain("418");
+    expect(JSON.stringify(serverPayload)).not.toContain("503");
   });
 
-  it("gateClientDetails returns undefined for null-rule codes and picks for allowlisted codes", () => {
-    // null rule → omit
-    expect(gateClientDetails("FORBIDDEN", { requiredRole: "admin" })).toBeUndefined();
-    expect(gateClientDetails("NOT_FOUND", { resource: "user:42" })).toBeUndefined();
-    // array rule → shallow-pick
-    expect(
-      gateClientDetails("VALIDATION", { fieldErrors: { a: ["x"] }, leak: 1 }),
-    ).toEqual({ fieldErrors: { a: ["x"] } });
-    // array rule, no matching keys present → undefined (omit, not empty object)
-    expect(gateClientDetails("VALIDATION", { nope: 1 })).toBeUndefined();
-    // non-object details under an array rule → undefined
-    expect(gateClientDetails("VALIDATION", null)).toBeUndefined();
-    expect(gateClientDetails("VALIDATION", "string")).toBeUndefined();
+  it("FORBIDDEN.requiredRole and NOT_FOUND.resource are WITHHELD (none-rule codes)", () => {
+    // null-rule equivalents under the unified gate: detailsExposure:'none' → omit entirely.
+    expect(CANONICAL_ERROR_SEMANTICS.FORBIDDEN.detailsExposure).toBe("none");
+    expect(CANONICAL_ERROR_SEMANTICS.NOT_FOUND.detailsExposure).toBe("none");
+
+    const forbidden = gate(appError("FORBIDDEN", { requiredRole: "admin" }));
+    const notFound = gate(appError("NOT_FOUND", { resource: "user:42" }));
+
+    expect(forbidden.details).toBeUndefined();
+    expect(notFound.details).toBeUndefined();
+    expect(JSON.stringify(forbidden)).not.toContain("admin");
+    expect(JSON.stringify(notFound)).not.toContain("user:42");
   });
 
-  it("result is JSON-safe: deep round-trips, is a plain object (not a class instance), has no functions", () => {
-    const err = makeError({
-      code: "VALIDATION",
-      details: { fieldErrors: { email: ["required"] } },
-      correlationId: "corr-xyz",
-      message: "raw server detail that must not leak",
-    });
+  it("array-rule with no matching keys present yields undefined (omit, not empty object)", () => {
+    // VALIDATION allowlist=['fieldErrors']; details with no matching key → details omitted.
+    const payload = gate(appError("VALIDATION", { nope: 1 }));
+    expect(payload.details).toBeUndefined();
+  });
 
-    const dto: ClientSerializedError = toClientSerialized(err, "dig-1");
+  it("non-object details under an allowlist rule yields undefined", () => {
+    // A non-object under an allowlist rule cannot expose any key → details omitted.
+    expect(gate(appError("VALIDATION", null)).details).toBeUndefined();
+    expect(gate(appError("VALIDATION", "string")).details).toBeUndefined();
+  });
+
+  it("payload is JSON-safe: deep round-trips, plain object (not a class instance), no functions, surface/target absent, full AppError never serializes", () => {
+    const payload = gate(
+      appError(
+        "VALIDATION",
+        { fieldErrors: { email: ["required"] } },
+        { message: "raw server detail that must not leak", cause: new Error("upstream"), digest: "dig-1" },
+      ),
+      "corr-xyz",
+    );
 
     // 1) deep round-trips through JSON unchanged
-    jsonRoundTrips(dto);
+    jsonRoundTrips(payload);
     // 2) not a class instance — a plain serializable object
-    expect(dto).not.toBeInstanceOf(DomainError);
-    expect(dto).not.toBeInstanceOf(Error);
-    expect(Object.getPrototypeOf(dto)).toBe(Object.prototype);
+    expect(payload).not.toBeInstanceOf(AppError);
+    expect(payload).not.toBeInstanceOf(Error);
+    expect(Object.getPrototypeOf(payload)).toBe(Object.prototype);
     // 3) no functions anywhere
-    expect(hasNoFunctions(dto)).toBe(true);
-    // 4) and the message still never leaks
-    expect(JSON.stringify(dto)).not.toContain("raw server detail");
+    expect(hasNoFunctions(payload)).toBe(true);
+    // 4) the message + cause still never leak
+    expect(JSON.stringify(payload)).not.toContain("raw server detail");
+    expect(JSON.stringify(payload)).not.toContain("upstream");
+    // 5) surface/target are NEVER on the wire payload; nor is any full-AppError carrier key.
+    const keys = Object.keys(payload);
+    for (const banned of ["surface", "target", "error", "cause", "stack", "name", "occurrence", "message"]) {
+      expect(keys).not.toContain(banned);
+    }
   });
 });
