@@ -44,10 +44,10 @@ error-decision-system (독립, peer: react) → apps/error-decision-next
 
 이 RFC의 출발점은 다음 인식이다. 두 시스템은 **경쟁자가 아니라 같은 문제의 다른 레이어**다.
 
-| | 정책 레이어 (무엇을 할지 *결정*) | 메커니즘 레이어 (실제로 잡고·나르고·실행) |
-|---|---|---|
-| **구 스택** | 🔴 약함 — flat `ErrorMeta`의 `present/log/severity` (NEW.md가 비판한 그것) | 🟢 강함 — 검증됨 (transport/normalize/vendor/framework/retry) |
-| **신 시스템** | 🟢 강함 — 결정 엔진 (`resolveErrorDecision`) | 🔴 거의 없음 — sink 인터페이스만 |
+|               | 정책 레이어 (무엇을 할지 _결정_)                                           | 메커니즘 레이어 (실제로 잡고·나르고·실행)                     |
+| ------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **구 스택**   | 🔴 약함 — flat `ErrorMeta`의 `present/log/severity` (NEW.md가 비판한 그것) | 🟢 강함 — 검증됨 (transport/normalize/vendor/framework/retry) |
+| **신 시스템** | 🟢 강함 — 결정 엔진 (`resolveErrorDecision`)                               | 🔴 거의 없음 — sink 인터페이스만                              |
 
 신 시스템은 **더 나은 엔진**이다. `NEW.md`가 옳게 진단했듯 "에러 코드 하나가 surface와 telemetry를 단독 결정"하는 구 모델은 제품이 커지면 무너진다. 신 결정 엔진은 occurrence·semantics·operation을 입력으로 user/telemetry 결정을 분리 산출하는 상위호환 모델이다.
 
@@ -59,7 +59,7 @@ error-decision-system (독립, peer: react) → apps/error-decision-next
 
 ### 2.2 목표
 
-1. **하나의 통합 에러 시스템.** `DomainError`/`Result`/registry를 단일 모델로 통합한다.
+1. **하나의 통합 에러 시스템.** 구·신의 `DomainError`/`Result`/registry를 단일 모델(`AppError` + 정적 카탈로그)로 통합한다.
 2. **결정 엔진을 단일 정책 해소자로.** `resolveErrorDecision`이 모든 정책 결정의 단일 권위가 된다. 구 `resolvePolicy`/flat `ErrorMeta`는 제거한다.
 3. **검증된 메커니즘 코드 보존.** transport/retry/normalization/rehydration/vendor 어댑터/Next 통합은 로직 유지, 인터페이스만 통합 커널에 맞춰 재배선한다.
 4. **정책을 리뷰 가능한 데이터 + 가드레일로.** 숨은 if문·ad-hoc toast를 lint로 막고, 정책을 카탈로그 데이터로 노출한다.
@@ -74,29 +74,29 @@ error-decision-system (독립, peer: react) → apps/error-decision-next
 
 이 RFC를 작성하기 전 다음이 합의되었다.
 
-| 결정 | 값 | 근거 |
-|---|---|---|
-| 프로덕션 소비자 | **없음 — clean break 가능** | 모두 private 데모/레퍼런스. 이상적 최종 형태에 집중 |
+| 결정            | 값                                                | 근거                                                                                                                                                                    |
+| --------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 프로덕션 소비자 | **없음 — clean break 가능**                       | 모두 private 데모/레퍼런스. 이상적 최종 형태에 집중                                                                                                                     |
 | 레지스트리 모델 | **정적 카탈로그 하나** (ALS/active-registry 제거) | 멀티테넌트 요구 없음. 신 엔진의 순수성 철학과 정합. 카탈로그는 `createDecisionSystem(catalog)` 생성 인자로 명시 주입 → 앰비언트 전역 없음, 교차 요청 누출 구조적 불가능 |
-| 프레임워크 타겟 | **무관 코어 + Next 어댑터 + 제네릭 React** | 신 시스템이 이미 프레임워크 무관. SPA(Vite) 증명 유지 |
-| 수렴 접근법 | **Approach 1 — 제자리 진화** | 검증된 코드 보존, 보류 RFC 방향과 일치, 위험 단계 분산 |
-| 가드레일 범위 | **풀 가드레일 + CI** | 문서가 가드레일을 일급으로 다룸 |
-| 이행 방식 | **단계적 6+Phase staged** | clean break여도 회귀 방지 + 리뷰 가능성. 각 단계 테스트 green 유지 |
+| 프레임워크 타겟 | **무관 코어 + Next 어댑터 + 제네릭 React**        | 신 시스템이 이미 프레임워크 무관. SPA(Vite) 증명 유지                                                                                                                   |
+| 수렴 접근법     | **Approach 1 — 제자리 진화**                      | 검증된 코드 보존, 보류 RFC 방향과 일치, 위험 단계 분산                                                                                                                  |
+| 가드레일 범위   | **풀 가드레일 + CI**                              | 문서가 가드레일을 일급으로 다룸                                                                                                                                         |
+| 이행 방식       | **단계적 6+Phase staged**                         | clean break여도 회귀 방지 + 리뷰 가능성. 각 단계 테스트 green 유지                                                                                                      |
 
 ## 4. 목표 아키텍처 / 패키지 토폴로지
 
 ```
 error-core  (프레임워크 무관 커널 — 단일 진실의 원천)
-  │  · 통합 데이터 모델: DomainError · Result · 정적 카탈로그
+  │  · 통합 데이터 모델: AppError(구 DomainError) · Result/DecisionResult · 정적 카탈로그
   │  · 결정 엔진: resolveErrorDecision  ← 단일 정책 해소자
-  │  · 생성·검증: createDecisionSystem(catalog) · fail/appError · validateDetails · validateCatalog
-  │  · 정규화·재수화: normalizeToDomainError · fromSerialized · fromClientSerialized
+  │  · 생성·검증: createDecisionSystem(catalog) · appError/fail · isAppError · validateDetails · validateCatalog
+  │  · 정규화·재수화: normalizeToAppError · fromSerialized · fromClientSerialized
   │  · 누출 게이트: toClientSerialized · 단일 details allowlist · disclosure 강제
   │  · i18n: resolveErrorMessage (Translator seam · {token} 보간 · key-echo 거부 · never-throws)
   │  · 텔레메트리: ReporterSink/NotifierSink/Presenter · executeErrorDecision · sampling · dead-man's-switch
   │  · 재시도: computeRetryDelay · exponentialBackoffWithJitter · parseRetryAfter (순수)
   │  · 네트워크 경계: networkBoundary (8 transport codes) · toErrorResponse
-  │  · 제네릭 경계 래퍼: defineFormAction/Query/ServerAction/BackgroundTask/RouteGuard
+  │  · 제네릭 경계 래퍼: defineFormAction/Query/ServerAction/BackgroundTask/RouteGuard/withRenderBoundary
   │  ✘ 제거: AsyncLocalStorage · runWithErrorRegistry · setActiveErrorRegistry · 격리 가드
   │
   ├── error-react   (peer: react)
@@ -112,6 +112,7 @@ error-core  (프레임워크 무관 커널 — 단일 진실의 원천)
   │
   └── error-next    (peer: next, @tanstack/react-query, react)  — Next 전용 경계만
          · safeServerAction/safeFormAction (useActionState shape · 코어 generic 래퍼를 감쌈)
+         · protectedPage (Next 페이지 가드 — 코어 RouteGuard 위에 Next 인터럽트 enactment)
          · enactDecision (server-only — surface→Next 인터럽트, §6)
          · framework control-flow 보존 (unstable_rethrow of redirect/notFound/forbidden)
          · per-request 컴포지션 루트 (getRequestHandler · React cache · getRequestCorrelationId)
@@ -143,41 +144,49 @@ createDecisionSystem({
 
 ## 5. 통합 데이터 모델
 
-### 5.1 DomainError
+### 5.1 AppError (정준 에러 클래스 — 구 DomainError)
+
+**네이밍 결정:** 클래스/팩토리/가드를 **`AppError` / `appError()` / `isAppError()`로 통일**한다.
+
+- 근거: 이 클래스는 `category: business | operational | fault`를 **모두** 싣는다. "Domain"(DDD)은 비즈니스 계층을 함의하지만 실제로는 `TIMEOUT`/`NETWORK_ERROR`(operational)·`SCHEMA_MISMATCH`/`UNKNOWN_SERVER_ERROR`(fault)까지 담으므로 의미상 부정확하다. 또한 현재 팩토리는 `appError()`, 가드는 `isDomainError()`, 클래스는 `DomainError`, error-core 문서는 `AppError`로 — **한 개념에 이름이 셋**이다(`app-error.ts`의 "AppError is the documented alias").
+- `AppError`는 의미상 정확("이 앱의 정준 에러", 모든 category 포괄)하고 기존 팩토리 `appError()` 및 error-core alias와 일치한다 → 신조어가 아닌 alias 승격.
+- 파생 이름도 따라간다: `isAppError()`, `normalizeToAppError()`; `fromSerialized`/`fromClientSerialized`는 `AppError`를 반환.
 
 순수 데이터로 통합한다. 앰비언트 레지스트리를 읽는 정책 getter를 제거한다(정책은 `resolveErrorDecision(error, occurrence, catalog)`가 온디맨드로 해소).
 
 ```ts
-class DomainError<C extends string = string> extends Error {
+class AppError<C extends string = string> extends Error {
   code: C;
   details?: DetailsOf<Catalog, C>; // per-code 타입
   cause?: unknown;
   occurrence?: Partial<OccurrenceContext>; // thrown 경로의 resource/event 컨텍스트 보존 (REVIEW.md 요구)
   correlationId?: string;
   retryAfterMs?: number;
-  digest?: string;                 // RSC 경계용 (구 error-core에서 보존)
+  userCanRetry?: boolean; // EDS 인스턴스 필드 보존 (index.ts:201)
+  digest?: string; // RSC 경계용 (구 error-core에서 보존)
 }
 ```
 
-- 구 `error-core`의 per-instance 정책 getter(`severity`/`present`/`log`...)는 제거.
-- 구/신 두 `DomainError`(app-error.ts vs decision-system index.ts)의 합집합 shape로 통합.
+- 구 `error-core`의 per-instance 정책 getter(`severity`/`present`/`log`...)는 **제거**. 단 `severity`/`retryable` per-instance override가 필요했던 케이스는 **occurrence 입력 또는 decision override(5% escape hatch)로 흡수** — 인스턴스에 정책 필드를 다시 두지 않는다.
+- 구/신 두 클래스(`error-core/src/app-error.ts`의 `DomainError`<C extends ErrorCode> vs `error-decision-system/src/index.ts:196`의 `DomainError`<C extends string>)의 **합집합 shape**로 통합하며, 이름은 `AppError`로 한다.
 
 ### 5.2 카탈로그 = ErrorSemantics + OperationMeta (정적)
 
 `ErrorSemantics`가 정책 힌트를 갖되 **경계를 명문화**한다.
 
-| 가져도 됨 (semantics 데이터) | 가지면 안 됨 (occurrence/presenter가 결정) |
-|---|---|
-| category, sensitivity | 최종 log level |
-| defaultHttpStatus, defaultRetryable | alert flag |
-| messageKeys (per disclosure) | 특정 React 컴포넌트 |
-| detailsExposure / detailsAllowlist | 스크린별 field mapping |
-| context별 disclosure/action/surface **힌트** | 특정 toast 카피 |
-| redirectTarget (제한적) | — |
+| 가져도 됨 (semantics 데이터)                 | 가지면 안 됨 (occurrence/presenter가 결정) |
+| -------------------------------------------- | ------------------------------------------ |
+| category, sensitivity                        | 최종 log level                             |
+| defaultHttpStatus, defaultRetryable          | alert flag                                 |
+| messageKeys (per disclosure)                 | 특정 React 컴포넌트                        |
+| detailsExposure / detailsAllowlist           | 스크린별 field mapping                     |
+| context별 disclosure/action/surface **힌트** | 특정 toast 카피                            |
+| redirectTarget (제한적)                      | —                                          |
 
 구 `ErrorMeta`의 평면 필드 매핑:
+
 - `kind` → `category`, `httpStatus` → `defaultHttpStatus`, `retryable` → `defaultRetryable`, `userMessageKey` → `defaultMessageKey`/`messageKeys`.
-- `present`/`log`/`severity`는 **힌트로 강등** — 더 이상 코드별로 *작성*하지 않고 엔진이 *도출*. 이를 "최종 결정"으로 읽던 소비자는 Phase에서 제거한다(§9 P2/P5).
+- `present`/`log`/`severity`는 **힌트로 강등** — 더 이상 코드별로 *작성*하지 않고 엔진이 _도출_. 이를 "최종 결정"으로 읽던 소비자는 Phase에서 제거한다(§9 P2/P5).
 
 ### 5.3 통합 wire 페이로드 (잠금)
 
@@ -191,19 +200,20 @@ class DomainError<C extends string = string> extends Error {
 ```ts
 interface ClientErrorPayload {
   code: string;
-  messageKey: string;        // 'userMessageKey'에서 명칭 통일
+  messageKey: string; // 'userMessageKey'에서 명칭 통일
   messageVars?: TranslateVars; // §5.4 — 보간 복원
   disclosure: DisclosureLevel;
-  action: UserAction;        // 와이어를 건넌다 (아래 결정)
+  action: UserAction; // 와이어를 건넌다 (아래 결정)
   supportCode?: string;
   retryAfterMs?: number;
-  correlationId?: string;    // 구 error-core 보존
-  digest?: string;           // RSC 경계용 보존
-  details?: unknown;         // 단일 allowlist 통과분만
+  correlationId?: string; // 구 error-core 보존
+  digest?: string; // RSC 경계용 보존
+  details?: unknown; // 단일 allowlist 통과분만
 }
 ```
 
 잠근 결정:
+
 - **`surface`/`target`은 와이어를 건너지 않는다** — 클라이언트가 재결정 (양쪽 구현 모두 이미 이렇게 함; 웹 전용이므로 시임 불필요).
 - **`action`은 건넌다** — EDS 구현이 이미 보냄. `NEW.md` 타입 블록은 `action`을 누락했지만 산문(:901)은 보내라고 함 → 산문 쪽으로 일관화.
 - **allowlist 메커니즘 1개로 통일**: 구 per-code `DETAILS_ALLOWLIST`(serialize-client.ts)와 신 `semantics.detailsExposure/detailsAllowlist`(index.ts) 중 하나로. 권고: `ErrorSemantics`에 co-located한 `detailsAllowlist`로 통일(카탈로그가 단일 진실).
@@ -213,6 +223,7 @@ interface ClientErrorPayload {
 현재 신 시스템은 `RATE_LIMITED`의 `{seconds}` 카운트다운을 렌더하지 못한다 (`UserErrorDecision`/`ClientErrorPayload`에 vars 자리 없음, `translate(messageKey)`가 vars를 못 받음). 구 `error-core`는 이를 렌더하고 테스트로 보증한다(`i18n-completeness.test.ts:142`).
 
 수정:
+
 - `UserErrorDecision` + `ClientErrorPayload`에 `messageVars?: TranslateVars` 추가 (또는 `retryAfterMs`에서 파생).
 - `error-react`의 `ErrorSurface`/`ErrorBoundary`는 EDS의 trivial `translate` 대신 **`error-core.resolveErrorMessage(decision.user.messageKey, translator, messageVars)`**를 호출.
 - EDS `demo.ts`의 `messages`/`translate`는 **레퍼런스 앱 예시로만** 남기고 커널 코드에서는 폐기.
@@ -226,11 +237,38 @@ interface ClientErrorPayload {
 
 **Known Limitation (잠금):** 구 `FALLBACK_MESSAGES`는 15개 canonical 코드에만 키가 있다. EDS가 만든 per-disclosure 키(`*.safe`/`*.generic`/`*.support`)는 co-located fallback이 없어, **host Translator가 없으면 generic 라인으로 degrade**한다. `validateCatalog`는 *키 존재*만 보장하지 *dependency-free 경로의 해소*는 보장하지 않는다. → 정적 카탈로그가 messageKey별 inline fallback 카피를 들지(SPA가 disclosure nuance 유지) 아니면 "Translator 없으면 generic" 동작을 문서화할지 P4에서 결정. 기본 권고: 카탈로그에 inline fallback 카피 보유.
 
+### 5.6 Result vs DecisionResult — in-process / wire 분리 (잠금, 보안 load-bearing)
+
+두 패키지의 Failure 모양이 **단순 병합 불가**다. 핵심은 직렬화 경계다.
+
+- 구 `error-core` (`result.ts`): `Failure = { ok:false, error: ClientSerializedError }` — **와이어 안전한 DTO만**.
+- 신 EDS (`index.ts:186`): `DecisionFailure = { ok:false, error: AppError, decision: ErrorDecision, payload: ClientErrorPayload, occurrence }` — **서버측 `AppError` 인스턴스를 통째로** 들고 있음.
+
+→ `DecisionFailure`를 server action 반환값으로 그대로 클라에 보내면 **전체 `AppError`가 누출**된다(error-core의 `Failure`가 `ClientSerializedError`만 싣는 이유). 통합 모델은 두 타입을 명시적으로 가른다.
+
+| 타입 | 용도 | 싣는 것 | 직렬화 |
+|---|---|---|---|
+| **`DecisionResult<T>`** (in-process) | 경계 래퍼가 반환, 같은 런타임의 UI가 소비 | `AppError` + `decision` + `occurrence` + `payload` | ❌ 와이어 금지 |
+| **`Result<T>`** (wire-crossing) | server→client 경계를 넘는 값 | `ClientErrorPayload`만 (§5.3) | ✅ 와이어 안전 |
+
+규칙:
+
+- 경계 래퍼(`defineFormAction` 등)는 in-process `DecisionResult`를 반환한다.
+- **server→client 경계를 넘을 때는 `DecisionResult` → `Result`(payload만)로 강등**한다 — `AppError`/`decision`/`occurrence`는 서버에 남는다. 이 강등은 누출 게이트(§5.3 `toClientErrorPayload`)와 같은 지점에서 일어난다.
+- `fail()`은 `FailureDraft`(`{ok:false, code, details, options}`, `index.ts:179`)를 반환하고, 경계가 `finalizeFailure`로 occurrence를 precedence(§6) 맞춰 병합해 `DecisionFailure`로 승격하는 **draft→finalize 2단계**를 보존한다.
+
+### 5.7 코드 어휘(vocabulary) 병합 (잠금)
+
+EDS demo 카탈로그(~10 코드)와 구 `error-core`의 15개 canonical 코드는 **서로 다른 코드 집합**이다. 특히 구 스택의 8개 transport 코드(`OFFLINE`/`TIMEOUT`/`REQUEST_ABORTED`/`NETWORK_ERROR`/`RATE_LIMITED`/`HTTP_CLIENT_ERROR`/`HTTP_SERVER_ERROR`/`SCHEMA_MISMATCH`)는 **EDS에 없다**(EDS엔 `networkBoundary`가 없으므로).
+
+→ 통합 정적 카탈로그는 두 어휘를 **병합**하고, transport 코드 8개를 포함한 **모든 코드에 `ErrorSemantics`를 작성**해야 한다(P2에서 기존 registry→`ErrorSemantics` shim 시 transport 코드도 함께 채움). "`ErrorMeta`→`ErrorSemantics` 매핑"(§5.2)은 15개 canonical 코드를 덮고, EDS 고유 코드는 추가 병합한다. 최종 `ErrorCode` union은 병합된 집합에서 도출한다.
+
 ## 6. 결정 해소 & 경계 enactment (잠금)
 
 `resolveErrorDecision`이 page-vs-component의 **단일 권위**다. 현재 `error-next`의 `raise()`는 `error.code`만 보고 분기(`NOT_FOUND→notFound`, `AUTH_REQUIRED→redirect`, `FORBIDDEN→forbidden`)하고, EDS `defineQuery`/`useDecisionQuery`는 같은 throw를 in-component `DecisionResult`로 바꾼다 — `resolveSurface`가 `page`/`redirect`를 내도 인터럽트하지 않는다. 이 충돌을 해소한다.
 
 규칙:
+
 1. `raise()`의 하드코딩 `error.code` switch **삭제**. page-ness는 occurrence가 결정.
 2. **`enactDecision(decision)`** (server-only, `error-next`) 도입:
    - `uiScope: 'page'` (route/render boundary) + `surface: 'page'/'redirect'` → **실제 Next 인터럽트** (`notFound()`/`forbidden()`/`redirect(target)`/일반 page는 `throw → error.tsx`).
@@ -249,6 +287,7 @@ interface ClientErrorPayload {
 문서가 일급으로 요구하나 **현재 enforcement로는 전무**하다(`.eslintrc*`/`eslint.config.*` 0개, 패키지별 lint 스크립트 없어 `turbo run lint`는 no-op, CI 없음).
 
 구축:
+
 1. **ESLint flat-config** (워크스페이스 루트):
    - `no-restricted-imports`: feature/app 코드에서 `@sentry/*`, `sonner`, pager client 직접 import **금지** (어댑터/컴포지션 루트만 허용).
    - `no-restricted-syntax`: `toast(error.message)`, `error.message` 직접 렌더, `Sentry.captureException` 직접 호출 **금지**.
@@ -261,17 +300,17 @@ interface ClientErrorPayload {
 
 clean break가 가능하지만, 회귀 방지 + 리뷰 가능성을 위해 단계적으로 간다. 각 Phase는 독립 PR이며 직전까지의 테스트를 green으로 유지한다.
 
-| Phase | 내용 | 비고 |
-|---|---|---|
-| **P0 정리·baseline** | 중복 브랜치 `eds-production-hardening` 삭제. 전체 테스트(구 ~187 + 신 ~43) green 고정. 양 시스템 공개 API 표면 인벤토리. | 동작 변경 없음 |
-| **P1 vocabulary** | `ErrorSemantics`/`OperationMeta`/`OccurrenceContext`/`RuntimeContext` + 결정 union들을 `error-core`에 추가 (기존 `ErrorMeta`와 병존). | 해소자 없음 |
-| **P2 엔진 graft** | `resolveErrorDecision`(+telemetry)를 `error-core`로 이식. 기존 15코드 registry에서 `ErrorSemantics`를 파생하는 shim. `validateCatalog` 추가. flat 필드 → 힌트 강등. | 두 해소자 일시 병존 |
-| **P3 DomainError 통합 + ALS 제거 (keystone)** | `DomainError`를 순수 데이터로 재작성, `AsyncLocalStorage`/`runWithErrorRegistry`/격리 가드 제거. 카탈로그를 `createDecisionSystem`로 명시 주입. **통합 wire 페이로드 + allowlist 통일 + messageVars** 적용. normalization/rehydration/serialization을 통합 모델로. | 커널 정체성 변경 — 최고 위험. 커널 전체 테스트 게이팅 |
-| **P4 error-react 추출** | `error-react` 신설, `ErrorSurface`+hooks 이주, 제네릭 `ErrorBoundary` 추가. `resolveErrorMessage` 배선(EDS trivial translate 폐기). 카탈로그 inline fallback 카피 결정 반영. | |
-| **P5 error-next 슬림화** | `safeServerAction`/`safeFormAction`/per-request root/`ErrorFallback`/QueryClient를 통합 커널 + `error-react` 위에 재구성. `raise()` → `enactDecision`. control-flow 보존 유지. **미테스트 seam에 테스트 추가**(safeServerAction/raise/request-handler.server/useErrorHandler/withRetry/next-control-flow/ErrorHandlerInit). | error-next가 최저 커버리지 — 테스트 *추가* 필수 |
-| **P6 벤더 재배선** | Sentry/sonner/pager를 통합 커널 sink 인터페이스로 재연결(주로 기계적). pager dedupKey는 adapter-side 유지. | |
-| **P7 가드레일 + CI** | ESLint flat-config + no-restricted-imports/syntax + 패키지 lint 스크립트 + CI + PR 체크리스트 구축. enforcement 이전 완료(§8). | |
-| **P8 데모/문서 수렴** | `error-decision-system` 패키지 + `apps/error-decision-next` 은퇴. `apps/error-architecture`를 통합 스택(신 hooks/ErrorSurface 포함) 도그푸딩으로 마이그레이션. `apps/error-decision-vite`는 SPA/무관 코어 증명으로 유지. `README`/설계 문서 단일화(`NEW.md`/`ERROR_DECISION_SYSTEM.md`/`error-design-kr.md`를 단일 canonical 문서로 통합, 나머지는 historical 마킹). | |
+| Phase                                         | 내용                                                                                                                                                                                                                                                                                                                                                                 | 비고                                                  |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **P0 정리·baseline**                          | 중복 브랜치 `eds-production-hardening` 삭제. 전체 테스트(구 ~187 + 신 ~43) green 고정. 양 시스템 공개 API 표면 인벤토리.                                                                                                                                                                                                                                             | 동작 변경 없음                                        |
+| **P1 vocabulary**                             | `ErrorSemantics`/`OperationMeta`/`OccurrenceContext`/`RuntimeContext` + 결정 union들을 `error-core`에 추가 (기존 `ErrorMeta`와 병존).                                                                                                                                                                                                                                | 해소자 없음                                           |
+| **P2 엔진 graft**                             | `resolveErrorDecision`(+telemetry)를 `error-core`로 이식. 기존 15코드 registry에서 `ErrorSemantics`를 파생하는 shim(transport 8코드 포함 코드 어휘 병합, §5.7). `validateCatalog` 추가. flat 필드 → 힌트 강등.                                                                                                                                                                                                  | 두 해소자 일시 병존                                   |
+| **P3 AppError 통합 + ALS 제거 (keystone)** | `AppError`(구 DomainError)를 순수 데이터로 재작성, `AsyncLocalStorage`/`runWithErrorRegistry`/격리 가드 제거. 카탈로그를 `createDecisionSystem`로 명시 주입. **통합 wire 페이로드 + Result-모델 분리(§5.6) + allowlist 통일 + messageVars** 적용. normalization/rehydration/serialization을 통합 모델로.                                                                                                   | 커널 정체성 변경 — 최고 위험. 커널 전체 테스트 게이팅 |
+| **P4 error-react 추출**                       | `error-react` 신설, `ErrorSurface`+hooks 이주, 제네릭 `ErrorBoundary` 추가. `resolveErrorMessage` 배선(EDS trivial translate 폐기). 카탈로그 inline fallback 카피 결정 반영.                                                                                                                                                                                         |                                                       |
+| **P5 error-next 슬림화**                      | `safeServerAction`/`safeFormAction`/per-request root/`ErrorFallback`/QueryClient를 통합 커널 + `error-react` 위에 재구성. `raise()` → `enactDecision`. control-flow 보존 유지. **미테스트 seam에 테스트 추가**(safeServerAction/raise/request-handler.server/useErrorHandler/withRetry/next-control-flow/ErrorHandlerInit).                                          | error-next가 최저 커버리지 — 테스트 _추가_ 필수       |
+| **P6 벤더 재배선**                            | Sentry/sonner/pager를 통합 커널 sink 인터페이스로 재연결(주로 기계적). pager dedupKey는 adapter-side 유지.                                                                                                                                                                                                                                                           |                                                       |
+| **P7 가드레일 + CI**                          | ESLint flat-config + no-restricted-imports/syntax + 패키지 lint 스크립트 + CI + PR 체크리스트 구축. enforcement 이전 완료(§8).                                                                                                                                                                                                                                       |                                                       |
+| **P8 데모/문서 수렴**                         | `error-decision-system` 패키지 + `apps/error-decision-next` 은퇴. `apps/error-architecture`를 통합 스택(신 hooks/ErrorSurface 포함) 도그푸딩으로 마이그레이션. `apps/error-decision-vite`는 SPA/무관 코어 증명으로 유지. `README`/설계 문서 단일화(`NEW.md`/`ERROR_DECISION_SYSTEM.md`/`error-design-kr.md`를 단일 canonical 문서로 통합, 나머지는 historical 마킹). |                                                       |
 
 ## 10. 테스트 & 검증 전략
 
@@ -286,7 +325,7 @@ clean break가 가능하지만, 회귀 방지 + 리뷰 가능성을 위해 단�
 
 - **SEC-4 nested allowlist 미강제**: top-level allowlist는 strip하지만 중첩 객체의 excess property는 컴파일 excess-property 검사를 통과할 수 있음. P3 직렬화 작업에서 `pickAllowlistedDetails`를 재귀화하거나 Known Limitation으로 명시. SPA(error-decision-vite)가 두 번째 무관 소비자이므로 표면이 넓어짐.
 - **dependency-free fallback degrade**: host Translator 부재 시 per-disclosure 키가 generic 라인으로 degrade (§5.5).
-- **alert dedup은 adapter-side**: 엔진은 `alert: boolean` + `fingerprint`만 결정. pager `NotifierSink`가 `DomainError`+ctx에서 `code:route` dedupKey를 재파생(현재 pager-notifier.ts:37 동작). doc open Q6("초기 boolean, 이후 reason/dedupKey")는 미해결 — 구조화는 후속.
+- **alert dedup은 adapter-side**: 엔진은 `alert: boolean` + `fingerprint`만 결정. pager `NotifierSink`가 `AppError`+ctx에서 `code:route` dedupKey를 재파생(현재 pager-notifier.ts:37 동작). doc open Q6("초기 boolean, 이후 reason/dedupKey")는 미해결 — 구조화는 후속.
 - **rate/frequency 기반 알림 상태**: 정적 카탈로그 커널은 무상태. frequency-elevated/recent-deploy 입력은 adapter 레이어(Sentry storm throttle, pager dedup)에 둠.
 - **correlationId 생성**: `error-next`는 per-request `getRequestCorrelationId`. 커널/SPA 경로는 클라 init에서 `crypto.randomUUID` 시임으로 생성/전파.
 
@@ -300,12 +339,14 @@ clean break가 가능하지만, 회귀 방지 + 리뷰 가능성을 위해 단�
 
 ## 부록 A. 결정된 합의 요약
 
-| # | 질문 | 결정 |
-|---|---|---|
-| 1 | 프로덕션 소비자 | 없음 — 설계 레퍼런스 레포 (clean break) |
-| 2 | 레지스트리 모델 | A: 정적 카탈로그 (ALS 제거) |
-| 3 | 프레임워크 타겟 | 무관 코어 + Next 어댑터 + 제네릭 React |
-| 4 | 수렴 접근법 | Approach 1: 제자리 진화 |
-| 5 | Multi-platform | 웹 전용 — YAGNI |
-| 6 | 가드레일 범위 | 풀 가드레일 + CI |
-| 7 | 이행 방식 | 단계적 6+Phase staged |
+| #   | 질문            | 결정                                    |
+| --- | --------------- | --------------------------------------- |
+| 1   | 프로덕션 소비자 | 없음 — 설계 레퍼런스 레포 (clean break) |
+| 2   | 레지스트리 모델 | A: 정적 카탈로그 (ALS 제거)             |
+| 3   | 프레임워크 타겟 | 무관 코어 + Next 어댑터 + 제네릭 React  |
+| 4   | 수렴 접근법     | Approach 1: 제자리 진화                 |
+| 5   | Multi-platform  | 웹 전용 — YAGNI                         |
+| 6   | 가드레일 범위   | 풀 가드레일 + CI                        |
+| 7   | 이행 방식       | 단계적 6+Phase staged                   |
+| 8   | 에러 클래스 네이밍 | `AppError`로 통일 (class + `appError()` + `isAppError()`) |
+| 9   | Result 모델     | in-process `DecisionResult` vs wire `Result` 분리 (§5.6) |
