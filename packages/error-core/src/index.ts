@@ -56,31 +56,9 @@ export {
 } from "./translator";
 
 // ── 텔레메트리 계약 + 단일 처리 경로 (컴포지션 루트/어댑터용) ───────────────
-export type { Reporter, Presenter, TelemetryContext } from "./telemetry";
+// (TelemetryContext/ReporterSink/NotifierSink/TelemetryDecision 등은 `export * from "./decision"`로 노출)
 export type { HandleErrorDeps } from "./types";
 export { createHandleError, type HandleErrorOptions } from "./handle-error";
-export {
-  noopNotifier,
-  compositeNotifier,
-  policyGatedNotifier,
-  thresholdAlertPolicy,
-  compareSeverity,
-  type Notifier,
-  type AlertPolicy,
-  type ThresholdPolicyOptions,
-} from "./notifier";
-
-// ── 순수 리포터 어댑터 (벤더 SDK 없음) ──────────────────────────────────────
-export {
-  guardedCompositeReporter,
-  compositeReporter,
-  noopReporter,
-  type GuardedCompositeReporter,
-  type ReporterHealth,
-  type LabeledReporter,
-  type CompositeReporterOptions,
-} from "./adapters/composite";
-export { createConsoleReporter } from "./adapters/console-reporter";
 
 // ── 정규화 + 헬퍼 ───────────────────────────────────────────────────────────
 export { normalizeToAppError } from "./normalize";
