@@ -1,7 +1,6 @@
 // §10 — makeError validation & runtime-driven UNKNOWN_* fallback.
-// We mock @/error/runtime so getRuntime() is deterministic: makeError's
-// unknownCodeForRuntime() (and app-error's getActiveErrorRegistry, which also
-// reads getRuntime) both route through this single mock.
+// @/error/runtime을 목해 getRuntime()을 결정적으로 만든다: makeError의 unknownCodeForRuntime()이
+// 이 단일 목을 통해 라우팅된다. (P3e: 상세 검증은 catalog validateDetails로 이동; 구 zod schema 제거.)
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { makeError } from "@/error/make-error";
@@ -46,7 +45,7 @@ describe("makeError — §10 validation", () => {
     });
 
     expect(err.code).toBe("UNKNOWN_SERVER_ERROR");
-    // Fallback details are normalized to null (see construct(..., null, ...)).
+    // Fallback details are normalized to null (appError(unknownCodeForRuntime(), null, …)).
     expect(err.details).toBeNull();
   });
 
