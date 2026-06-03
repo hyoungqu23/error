@@ -2,14 +2,11 @@
 // The ONLY file that knows a pager vendor exists. Swappable: PagerDuty / Opsgenie
 // / Slack are three PagerTransport implementations behind one webhook shape.
 import "server-only"; // paging belongs to the server runtime; never bundled to the client
-import type { Notifier } from "error-core/notifier";
-import type { DomainError } from "error-core/app-error";
-import type { Severity } from "error-core/severity";
-import type { TelemetryContext } from "error-core/telemetry";
+import type { NotifierSink, TelemetryDecision, TelemetryContext, AppError } from "error-core";
 
 export interface PageEvent {
   readonly title: string;
-  readonly severity: Severity;
+  readonly severity: TelemetryDecision["level"];
   readonly code: string;
   readonly correlationId?: string;
   readonly route?: string;
@@ -23,12 +20,12 @@ export interface PagerTransport {
 }
 
 const toPageEvent = (
-  error: DomainError,
-  severity: Severity,
+  error: AppError,
+  level: TelemetryDecision["level"],
   ctx: TelemetryContext,
 ): PageEvent => ({
-  title: `[${severity.toUpperCase()}] ${error.code}: ${error.message}`,
-  severity,
+  title: `[${level.toUpperCase()}] ${error.code}: ${error.message}`,
+  severity: level,
   code: error.code,
   correlationId: ctx.correlationId,
   route: ctx.route,
@@ -70,7 +67,7 @@ export interface PagerNotifierOptions {
 }
 
 /**
- * Default pager Notifier. notify() is sync-returning (fire-and-forget): it kicks off
+ * Default pager NotifierSink. alert() is sync-returning (fire-and-forget): it kicks off
  * the async send and never awaits it, so handleError stays non-blocking. Transport
  * failures are swallowed (and self-reported to console) — alerting must never throw.
  * (G7) An in-process per-dedupKey suppressor collapses a storm of the same incident
@@ -79,11 +76,11 @@ export interface PagerNotifierOptions {
 export const createPagerNotifier = (
   transport: PagerTransport,
   options: PagerNotifierOptions = {},
-): Notifier => {
+): NotifierSink => {
   const suppressor = makeDedupSuppressor(options.dedupWindowMs ?? 60_000, options.now);
   return {
-    notify(error, severity, ctx) {
-      const event = toPageEvent(error, severity, ctx);
+    alert(error, decision, ctx) {
+      const event = toPageEvent(error, decision.level, ctx);
       if (!suppressor.allow(event.dedupKey)) return; // already paged this incident this window.
       void transport.send(event).catch((cause: unknown) => {
         console.error({ tag: "[pager-failed]", code: error.code, cause });

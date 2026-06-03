@@ -10,14 +10,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPagerNotifier, webhookPagerTransport } from "@/error/adapters/pager-notifier";
 import type { PagerTransport, PageEvent } from "@/error/adapters/pager-notifier";
 import { makeError } from "@/error/make-error";
-import type { TelemetryContext } from "@/error/telemetry";
+import type { TelemetryContext, TelemetryDecision } from "@/error/index";
 
 const ctxFor = (route: string): TelemetryContext => ({
   runtime: "server",
+  operation: "checkout",
   correlationId: "c1",
   route,
   user: null,
 });
+
+// NotifierSink.alert receives a resolved TelemetryDecision (not a bare severity).
+const fatalDecision: TelemetryDecision = {
+  capture: true,
+  level: "fatal",
+  breadcrumb: false,
+  alert: true,
+};
 
 const recordingTransport = () => {
   const events: PageEvent[] = [];
@@ -41,12 +50,12 @@ describe("createPagerNotifier suppressor (G7)", () => {
     const ctx = ctxFor("/checkout");
 
     // First page for the dedupKey passes.
-    notifier.notify(error, "fatal", ctx);
+    notifier.alert(error, fatalDecision,ctx);
     // A storm of the same incident inside the window is suppressed.
     clock = 10_000;
-    notifier.notify(error, "fatal", ctx);
+    notifier.alert(error, fatalDecision,ctx);
     clock = 59_999;
-    notifier.notify(error, "fatal", ctx);
+    notifier.alert(error, fatalDecision,ctx);
 
     expect(transport.send).toHaveBeenCalledTimes(1);
   });
@@ -61,9 +70,9 @@ describe("createPagerNotifier suppressor (G7)", () => {
     const error = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
     const ctx = ctxFor("/checkout");
 
-    notifier.notify(error, "fatal", ctx);
+    notifier.alert(error, fatalDecision,ctx);
     clock = 60_000; // window elapsed (t - prev === windowMs is NOT < windowMs → allow)
-    notifier.notify(error, "fatal", ctx);
+    notifier.alert(error, fatalDecision,ctx);
 
     expect(transport.send).toHaveBeenCalledTimes(2);
   });
@@ -78,8 +87,8 @@ describe("createPagerNotifier suppressor (G7)", () => {
     const error = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
 
     // Same code, DIFFERENT route → different dedupKey → both page.
-    notifier.notify(error, "fatal", ctxFor("/a"));
-    notifier.notify(error, "fatal", ctxFor("/b"));
+    notifier.alert(error, fatalDecision,ctxFor("/a"));
+    notifier.alert(error, fatalDecision,ctxFor("/b"));
 
     expect(transport.send).toHaveBeenCalledTimes(2);
     expect(events.map((e) => e.dedupKey)).toEqual([
@@ -93,7 +102,7 @@ describe("createPagerNotifier suppressor (G7)", () => {
     const notifier = createPagerNotifier(transport);
     const error = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
 
-    expect(() => notifier.notify(error, "fatal", ctxFor("/x"))).not.toThrow();
+    expect(() => notifier.alert(error, fatalDecision,ctxFor("/x"))).not.toThrow();
     expect(transport.send).toHaveBeenCalledTimes(1);
   });
 });
