@@ -10,8 +10,8 @@
 // specifies `FALLBACK_MESSAGES: Record<ErrorCode, string>` (single default-locale
 // column), so the map is the Korean default column and the `Translator.locale` seam
 // is retained for host adapters that resolve other locales.
-import type { ErrorCode } from "./registry";
-import { DEFAULT_ERROR_REGISTRY } from "./registry";
+import type { ErrorCode } from "./decision/codes";
+import { CANONICAL_ERROR_SEMANTICS } from "./decision/catalog";
 
 export type TranslateVars = Record<string, string | number>;
 
@@ -48,11 +48,11 @@ export const FALLBACK_MESSAGES = {
 
 const GENERIC_FALLBACK = "알 수 없는 오류가 발생했습니다.";
 
-/** Reverse index: userMessageKey string → ErrorCode. Built once from the registry. */
+/** Reverse index: defaultMessageKey string → ErrorCode. Built once from the canonical catalog. */
 const KEY_TO_CODE: Readonly<Record<string, ErrorCode>> = Object.freeze(
-  (Object.keys(DEFAULT_ERROR_REGISTRY) as ErrorCode[]).reduce<Record<string, ErrorCode>>(
+  (Object.keys(CANONICAL_ERROR_SEMANTICS) as ErrorCode[]).reduce<Record<string, ErrorCode>>(
     (acc, code) => {
-      acc[DEFAULT_ERROR_REGISTRY[code].userMessageKey] = code;
+      acc[CANONICAL_ERROR_SEMANTICS[code].defaultMessageKey] = code;
       return acc;
     },
     {},
@@ -66,8 +66,8 @@ const interpolate = (template: string, vars?: TranslateVars): string =>
     : template;
 
 /**
- * Look up a finished fallback message for a `userMessageKey` (or a raw ErrorCode).
- * Returns `undefined` only if the key is neither a known registry userMessageKey nor
+ * Look up a finished fallback message for a `defaultMessageKey` (or a raw ErrorCode).
+ * Returns `undefined` only if the key is neither a known catalog defaultMessageKey nor
  * a literal ErrorCode.
  */
 const fallbackMessage = (key: string, vars?: TranslateVars): string | undefined => {
