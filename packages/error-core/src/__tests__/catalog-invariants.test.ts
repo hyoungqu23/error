@@ -75,6 +75,32 @@ describe("§10 catalog invariants (P3e)", () => {
     });
   });
 
+  // P3e 후속(리뷰): 구 registry 1:1 교차검증이 사라진 자리를, 신 카탈로그 SSOT 자체에 대한
+  // 코드별 정확값 테이블로 복원한다(catalog.ts 값에서 직접 전사). 범위/타입 체크(위)만으로는
+  // NOT_FOUND 404→409, OFFLINE true→false 같은 정확값 변이가 통과해버리므로 그 회귀를 RED로 만든다.
+  const EXPECTED_STATUS_RETRYABLE: Record<ErrorCode, { status: number; retryable: boolean }> = {
+    VALIDATION: { status: 422, retryable: false },
+    INVALID_CREDENTIALS: { status: 401, retryable: false },
+    AUTH_REQUIRED: { status: 401, retryable: false },
+    FORBIDDEN: { status: 403, retryable: false },
+    NOT_FOUND: { status: 404, retryable: false },
+    OFFLINE: { status: 503, retryable: true },
+    TIMEOUT: { status: 504, retryable: true },
+    REQUEST_ABORTED: { status: 503, retryable: false },
+    NETWORK_ERROR: { status: 502, retryable: true },
+    HTTP_CLIENT_ERROR: { status: 400, retryable: false },
+    RATE_LIMITED: { status: 429, retryable: true },
+    HTTP_SERVER_ERROR: { status: 500, retryable: true },
+    SCHEMA_MISMATCH: { status: 502, retryable: false },
+    UNKNOWN_SERVER_ERROR: { status: 500, retryable: false },
+    UNKNOWN_CLIENT_ERROR: { status: 500, retryable: false },
+  };
+
+  it.each(CODES)("code %s pins exact defaultHttpStatus / defaultRetryable", (code) => {
+    expect(CANONICAL_ERROR_SEMANTICS[code].defaultHttpStatus).toBe(EXPECTED_STATUS_RETRYABLE[code].status);
+    expect(CANONICAL_ERROR_SEMANTICS[code].defaultRetryable).toBe(EXPECTED_STATUS_RETRYABLE[code].retryable);
+  });
+
   it("the business set is EXACTLY the five business-category codes", () => {
     const businessByCategory = CODES.filter((c) => CANONICAL_ERROR_SEMANTICS[c].category === "business");
     expect(businessByCategory.sort()).toEqual([...BUSINESS_CODES].sort());
