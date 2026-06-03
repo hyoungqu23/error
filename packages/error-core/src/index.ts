@@ -4,7 +4,7 @@
 // NO next/*, NO react, NO 벤더 SDK). React/Next 통합은 `error-next`,
 // Sentry/sonner/pager 벤더 어댑터는 `error-adapters`에 있다.
 //
-// 세부 모듈은 deep import도 가능하다: `import { … } from "error-core/app-error"`.
+// 세부 모듈은 deep import도 가능하다: `import { … } from "error-core/decision/app-error"`.
 
 // ── 에러 모델 + 식별 ────────────────────────────────────────────────────────
 // 통합 모델(AppError 클래스·appError·isAppError·SerializedError·isSerializedError·
