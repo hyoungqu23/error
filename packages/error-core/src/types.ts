@@ -2,7 +2,8 @@
 //
 // P3b-ii: handleError is now a thin delegate over a DecisionSystem + the decision sinks
 // (ReporterSink/NotifierSink from decision/types). The old registry + Reporter/Presenter/
-// Notifier deps are gone (the old sink interface FILES survive for error-adapters until P3e/P6).
+// Notifier deps are gone, and (P3e) the old sink interface FILES are deleted too —
+// error-adapters re-wires onto ReporterSink/NotifierSink in P6.
 //
 // The Translator is intentionally NOT here (§4.4): message resolution is a
 // render-time concern, not part of the handleError pipeline.
