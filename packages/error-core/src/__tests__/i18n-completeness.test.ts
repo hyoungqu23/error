@@ -10,9 +10,10 @@ import {
   FALLBACK_MESSAGES,
   type Translator,
 } from "@/error/translator";
-import { DEFAULT_ERROR_REGISTRY, type ErrorCode } from "@/error/registry";
+import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
+import type { ErrorCode } from "@/error/decision/codes";
 
-const ALL_CODES = Object.keys(DEFAULT_ERROR_REGISTRY) as ErrorCode[];
+const ALL_CODES = Object.keys(CANONICAL_ERROR_SEMANTICS) as ErrorCode[];
 
 // The ultimate generic line resolveErrorMessage falls back to. Kept in sync with
 // the source's GENERIC_FALLBACK (which is the value of the UNKNOWN_* entries).
@@ -54,7 +55,7 @@ describe("§10.3 i18n fallback completeness (CI guard)", () => {
   it.each(ALL_CODES)(
     "resolveErrorMessage(userMessageKey of %s) resolves to non-empty copy that is NOT the raw key",
     (code) => {
-      const key = DEFAULT_ERROR_REGISTRY[code].userMessageKey;
+      const key = CANONICAL_ERROR_SEMANTICS[code].defaultMessageKey;
       const msg = resolveErrorMessage(key);
       expect(typeof msg).toBe("string");
       expect(msg.length).toBeGreaterThan(0);
