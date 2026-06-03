@@ -7,33 +7,13 @@
 // 세부 모듈은 deep import도 가능하다: `import { … } from "error-core/app-error"`.
 
 // ── 에러 모델 + 식별 ────────────────────────────────────────────────────────
+// 통합 모델(AppError 클래스·appError·isAppError·SerializedError·isSerializedError·
+// ClientErrorPayload·isClientErrorPayload·ErrorCode·KNOWN_ERROR_CODES·isKnownErrorCode·
+// CANONICAL_ERROR_SEMANTICS 등)은 전부 `export * from "./decision"`로 노출된다(파일 하단).
 export { makeError, unknownCodeForRuntime } from "./make-error";
-export {
-  DomainError,
-  isDomainError,
-  isSerializedError,
-  isClientSerializedError,
-  isExpectedCode,
-  resolvePolicy,
-  type AppError,
-  type AppErrorOptions,
-  type SerializedError,
-  type ClientSerializedError,
-  type ResolvedPolicy,
-  type ResolvedAppError,
-} from "./app-error";
 
-// ── 레지스트리(SSOT) + 스키마 + 어휘 ────────────────────────────────────────
-export { DEFAULT_ERROR_REGISTRY, type ErrorCode, type ErrorMeta, type ErrorRegistry } from "./registry";
-export { ErrorDetailsSchema, type ErrorDetailsMap } from "./schema";
-export type { Severity } from "./severity";
-export type { PresentAction, LogLevel, HttpStatus, ErrorKind } from "./policy";
+// ── 런타임 감지 ─────────────────────────────────────────────────────────────
 export { getRuntime, type Runtime } from "./runtime";
-export {
-  getActiveErrorRegistry,
-  setActiveErrorRegistry,
-  runWithErrorRegistry,
-} from "./active-registry";
 
 // ── 직렬화 안전 Result 계약(wire) + 누출 게이트는 decision/system toClientErrorPayload로 일원화 ──
 export {
