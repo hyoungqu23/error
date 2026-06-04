@@ -5,7 +5,7 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 // 이 패키지가 소유한 next-internal 모듈(상대 import로 묶여 있어 alias도 ./src로 해소).
 const NEXT_INTERNAL =
-  /^@\/error\/(next-control-flow|raise|request-handler\.server|safe-server-action|safe-form-action|with-retry|use-error-handler|registry-context|query-client)$/;
+  /^@\/error\/(next-control-flow|raise|request-handler\.server|safe-server-action|safe-form-action|with-retry|use-error-handler|query-client)$/;
 
 export default defineConfig({
   resolve: {

@@ -93,10 +93,11 @@ export function ErrorFallback({
   // (d) only offer a retry when a retry is meaningful. A known AppError uses its catalog
   // `defaultRetryable`; a non-AppError (raw render crash) is always offered the affordance
   // (reset/reload may recover a transient render fault).
-  const canRetry =
-    isAppError(error) && isKnownErrorCode(error.code)
-      ? CANONICAL_ERROR_SEMANTICS[error.code].defaultRetryable
-      : true;
+  // fall-closed: 카탈로그 밖 코드를 단 AppError는 재시도 의미를 보장할 수 없으므로 숨긴다
+  // (구 모델의 UNKNOWN_* fallback retryable:false와 동일 거동).
+  const canRetry = isAppError(error)
+    ? isKnownErrorCode(error.code) && CANONICAL_ERROR_SEMANTICS[error.code].defaultRetryable
+    : true;
 
   return (
     <div role="alert" ref={alertRef} tabIndex={-1}>
