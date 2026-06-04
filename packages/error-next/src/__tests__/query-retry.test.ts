@@ -9,7 +9,8 @@ import type { QueryClient } from "@tanstack/react-query";
 import { makeQueryClient, MAX_QUERY_RETRIES } from "@/error/query-client";
 import { withRetry } from "@/error/with-retry";
 import { makeError } from "@/error/make-error";
-import { DomainError } from "@/error/app-error";
+import { isAppError } from "@/error/decision/app-error";
+import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
 import { DEFAULT_BACKOFF } from "@/error/backoff";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -39,8 +40,8 @@ describe("makeQueryClient() retry predicate (queries.retry)", () => {
     const retry = getRetryPredicate(makeQueryClient());
     const notFound = makeError({ code: "NOT_FOUND", details: { resource: "doc" } });
 
-    // sanity: the registry flag we depend on
-    expect(notFound.retryable).toBe(false);
+    // sanity: the catalog flag we depend on
+    expect(CANONICAL_ERROR_SEMANTICS.NOT_FOUND.defaultRetryable).toBe(false);
     // false at every count, including the very first failure
     expect(retry(0, notFound)).toBe(false);
     expect(retry(1, notFound)).toBe(false);
@@ -55,7 +56,7 @@ describe("makeQueryClient() retry predicate (queries.retry)", () => {
         code === "HTTP_SERVER_ERROR" ? ({ status: 500 } as const) : null;
       const err = makeError({ code, details } as Parameters<typeof makeError>[0]);
 
-      expect(err.retryable).toBe(true);
+      expect(CANONICAL_ERROR_SEMANTICS[code].defaultRetryable).toBe(true);
       // retried while failureCount < MAX_QUERY_RETRIES (0-based count)
       for (let count = 0; count < MAX_QUERY_RETRIES; count += 1) {
         expect(retry(count, err)).toBe(true);
@@ -155,8 +156,8 @@ describe("withRetry() honors DomainError.retryable", () => {
     let calls = 0;
     const sleeps: number[] = [];
     const offline = makeError({ code: "OFFLINE", details: null });
-    expect(offline.retryable).toBe(true);
-    expect(offline).toBeInstanceOf(DomainError);
+    expect(CANONICAL_ERROR_SEMANTICS.OFFLINE.defaultRetryable).toBe(true);
+    expect(isAppError(offline)).toBe(true);
 
     const result = await withRetry(
       async () => {

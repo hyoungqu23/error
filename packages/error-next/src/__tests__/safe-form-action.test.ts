@@ -18,7 +18,7 @@ import { z } from "zod";
 
 // --- mock #1: the per-request server handler (the unexpected-error sink) ------------
 // Hoisted spy so each test can assert it received the unexpected error untouched.
-const handleServerError = vi.fn<(input: unknown, options?: { ux?: string }) => unknown>(
+const handleServerError = vi.fn<(input: unknown) => unknown>(
   () => ({}) as unknown,
 );
 vi.mock("@/error/request-handler.server", () => ({
@@ -73,7 +73,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected Failure");
     expect(result.error.code).toBe("VALIDATION");
-    expect(result.error.userMessageKey).toBe("error.validation");
+    expect(result.error.messageKey).toBe("error.validation");
     // VALIDATION is the one code whose `fieldErrors` are allowlisted to the client.
     const details = result.error.details as { fieldErrors: Record<string, string[]> };
     expect(details.fieldErrors).toBeDefined();
@@ -127,14 +127,14 @@ describe("safeFormAction — §10 mutation Result path", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected Failure");
     expect(result.error.code).toBe("NOT_FOUND");
-    expect(result.error.userMessageKey).toBe("error.notFound");
+    expect(result.error.messageKey).toBe("error.notFound");
     // NOT_FOUND.resource is intentionally withheld from the client allowlist.
     expect(result.error.details).toBeUndefined();
     // Expected business error is Track-1: returned, never sent to the unexpected sink.
     expect(handleServerError).not.toHaveBeenCalled();
   });
 
-  it("action throwing an UNEXPECTED error → reports via getRequestHandler(ux:none) then re-throws", async () => {
+  it("action throwing an UNEXPECTED error → reports via getRequestHandler then re-throws", async () => {
     const boom = new Error("db exploded");
     const action = safeFormAction(schema, async (_data: In) => {
       throw boom;
@@ -144,7 +144,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
 
     await expect(action(null, fd({ id: "abc", count: "1" }))).rejects.toBe(boom);
     expect(handleServerError).toHaveBeenCalledTimes(1);
-    expect(handleServerError).toHaveBeenCalledWith(boom, { present: "silent" });
+    expect(handleServerError).toHaveBeenCalledWith(boom);
   });
 
   it("action throwing an UNEXPECTED (non-expected code) DomainError → reports + re-throws", async () => {
@@ -158,7 +158,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
 
     await expect(action(null, fd({ id: "abc", count: "1" }))).rejects.toBe(serverErr);
     expect(handleServerError).toHaveBeenCalledTimes(1);
-    expect(handleServerError).toHaveBeenCalledWith(serverErr, { present: "silent" });
+    expect(handleServerError).toHaveBeenCalledWith(serverErr);
   });
 
   it("thrown redirect control-flow signal is re-thrown UNTOUCHED and never reported", async () => {
@@ -232,7 +232,7 @@ describe("safeServerAction — RPC-style sibling shares the same Result plumbing
       throw boom;
     });
     await expect(unexpectedAction({ id: "x", count: 1 } as In)).rejects.toBe(boom);
-    expect(handleServerError).toHaveBeenCalledWith(boom, { present: "silent" });
+    expect(handleServerError).toHaveBeenCalledWith(boom);
 
     handleServerError.mockClear();
     const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: REDIRECT_DIGEST });

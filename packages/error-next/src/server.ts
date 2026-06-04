@@ -21,8 +21,9 @@ export {
   type HandleServerError,
 } from "./request-handler.server";
 
-// Route Handler 에러 → HTTP Response 매퍼(messageless, details-gated body). core 구현 재노출.
-export { toErrorResponse } from "error-core/route-handler";
+// Route Handler 에러 → HTTP Response 매퍼(messageless, details-gated body).
+// request-handler가 errorSystem에 바인딩한 createErrorResponder 인스턴스를 재노출(단일 outbound 누출게이트).
+export { errorResponder } from "./request-handler.server";
 
 // 서버측 재시도(retryable 플래그 + Retry-After 존중).
 // BackoffConfig/DEFAULT_BACKOFF는 error-core(backoff.ts)가 단일 출처 — 여기서 재노출하지 않는다.

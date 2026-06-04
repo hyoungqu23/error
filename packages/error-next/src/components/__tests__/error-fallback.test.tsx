@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("ErrorFallback (§10 boundary component)", () => {
-  it("reports to handleError exactly once in the effect with log:'none' (no duplicate server report)", async () => {
+  it("reports to handleError exactly once in the effect with telemetry suppressed (no duplicate server report)", async () => {
     const error = makeErr("d1");
     render(<ErrorFallback error={error} reset={vi.fn()} />);
 
@@ -36,9 +36,11 @@ describe("ErrorFallback (§10 boundary component)", () => {
     expect(call).toBeDefined();
     // First positional arg is the error itself.
     expect(call?.[0]).toBe(error);
-    // Second arg carries the log:"none" guard (already reported upstream) and a ctx.
-    const opts = call?.[1] as { log?: string; ctx?: { route?: string } } | undefined;
-    expect(opts).toMatchObject({ log: "none" });
+    // Second arg suppresses telemetry (already reported upstream) and carries a ctx.
+    const opts = call?.[1] as
+      | { telemetry?: { capture?: boolean }; ctx?: { route?: string } }
+      | undefined;
+    expect(opts).toMatchObject({ telemetry: { capture: false } });
     // route is folded into TelemetryContext via ctx (location.pathname in jsdom).
     expect(opts?.ctx).toMatchObject({ route: expect.any(String) });
   });

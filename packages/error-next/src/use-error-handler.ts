@@ -12,9 +12,7 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { handleError } from "error-core/handler";
 import type { HandleErrorOptions } from "error-core/handle-error";
-import type { ResolvedAppError } from "error-core/app-error";
-import type { PresentAction } from "error-core/policy";
-import type { ErrorCode } from "error-core/registry";
+import type { DecisionFailure, ErrorCode } from "error-core";
 
 /**
  * Optional dedicated-route map for the "page" PresentAction. A code present here
@@ -34,26 +32,26 @@ const PAGE_ROUTE_BY_CODE: Partial<Record<ErrorCode, string>> = {
 export const useErrorHandler = () => {
   const router = useRouter();
   return useCallback(
-    (input: unknown, opts?: HandleErrorOptions): ResolvedAppError => {
+    (input: unknown, opts?: HandleErrorOptions): DecisionFailure => {
       const result = handleError(input, opts);
-      const present: PresentAction = result.policy.present; // effective action (folds in per-call override)
+      const surface = result.decision.user.surface; // resolved ErrorSurface (folds in per-call override)
 
-      if (present === "redirect") {
+      if (surface === "redirect") {
         // G9: preserve the page the user was on so post-login can bounce back.
         // The server raise() cannot read client location, so the returnTo is appended HERE.
         const returnTo = encodeURIComponent(location.pathname + location.search);
         router.push("/login?returnTo=" + returnTo);
         return result;
       }
-      if (present === "page") {
-        const route = PAGE_ROUTE_BY_CODE[result.code];
+      if (surface === "page") {
+        const route = PAGE_ROUTE_BY_CODE[result.error.code as ErrorCode];
         if (route) {
           router.push(route); // dedicated full-page route (e.g. FORBIDDEN → /403)
         } else {
           throw result.error; // escalate to nearest error.tsx (normalized instance)
         }
       }
-      // caller switches on result.code for in-place UI when present is toast/alert/inline/silent
+      // caller switches on result.error.code for in-place UI when surface is toast/dialog/inline/silent
       return result;
     },
     [router],

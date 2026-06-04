@@ -19,12 +19,8 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { makeError } from "@/error/make-error";
-import { setActiveErrorRegistry } from "@/error/active-registry";
-import { DEFAULT_ERROR_REGISTRY } from "@/error/registry";
-
-// Bind the active registry on the client (jsdom → runtime "client") so a DomainError's
-// `retryable` getter resolves off DEFAULT deterministically.
-setActiveErrorRegistry(DEFAULT_ERROR_REGISTRY);
+// (P5: active-registry는 삭제됨 — retry 가시성은 정적 catalog defaultRetryable로 결정되므로
+//  클라이언트 바인딩이 필요 없다.)
 
 const mockRouter = (refresh: () => void): AppRouterInstance =>
   ({

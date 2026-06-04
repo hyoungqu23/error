@@ -6,7 +6,7 @@
 // The retry-delay oracle + Retry-After hint extraction are inlined here so this module
 // stays self-contained (no React/TanStack dependency): the framework-free delay policy.
 import "server-only";
-import { isDomainError } from "error-core/app-error";
+import { isAppError, isKnownErrorCode, CANONICAL_ERROR_SEMANTICS } from "error-core";
 
 export interface BackoffConfig {
   /** Base delay for attempt 0, in ms. */ readonly baseMs: number;
@@ -17,7 +17,7 @@ export const DEFAULT_BACKOFF: BackoffConfig = { baseMs: 1_000, maxMs: 30_000 };
 
 /** Extract a server-provided retry hint (ms) from an error, if it carries one (RATE_LIMITED). */
 const retryAfterHintFromError = (err: unknown): number | undefined => {
-  if (!isDomainError(err)) return undefined;
+  if (!isAppError(err)) return undefined;
   const details = err.details as { retryAfterMs?: unknown } | null | undefined;
   const hint = details?.retryAfterMs;
   return typeof hint === "number" && Number.isFinite(hint) && hint >= 0 ? hint : undefined;
@@ -74,7 +74,11 @@ export const withRetry = async <T>(
     try {
       return await fn();
     } catch (error) {
-      const canRetry = isDomainError(error) && error.retryable && attempt < maxRetries;
+      const canRetry =
+        isAppError(error) &&
+        isKnownErrorCode(error.code) &&
+        CANONICAL_ERROR_SEMANTICS[error.code].defaultRetryable &&
+        attempt < maxRetries;
       if (!canRetry) throw error;
       await sleep(computeRetryDelay(attempt, error, backoff, rand));
       attempt += 1;

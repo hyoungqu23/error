@@ -4,9 +4,9 @@
 // expected error becomes the right HTTP page on the server.
 import "server-only";
 import { notFound, redirect, forbidden } from "next/navigation";
-import type { DomainError } from "error-core/app-error";
+import type { AppError } from "error-core";
 
-export function raise(error: DomainError): never {
+export function raise(error: AppError): never {
   switch (error.code) {
     case "NOT_FOUND":
       notFound();

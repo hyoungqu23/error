@@ -1,100 +1,96 @@
 // error/request-handler.server.ts   ('server-only')
 // The SERVER composition root + per-request handler retrieval, collapsed into one
-// server-only module (the design split this across server-deps / session /
-// get-request-handler; the canonical module map exposes all three surfaces here).
+// server-only module.
 //
 //   - serverDeps               : the request-INDEPENDENT sink choice (built once per
 //                                module load — NO correlationId/user; those live on the
-//                                per-request ctx). Composes a guarded console reporter,
-//                                a no-op presenter, and a severity-gated pager notifier.
+//                                per-request ctx). A console ReporterSink + a pager NotifierSink.
+//   - errorResponder           : the bound HTTP error responder for route handlers.
 //   - getRequestCorrelationId  : request-scoped correlation ID (React cache()).
-//   - getRequestHandler        : per-request `handleServerError`, request-scoped via
-//                                React cache(), bound to serverDeps.registry through
-//                                runWithErrorRegistry so the getters resolve the
-//                                request's registry. Module-level mutable ctx/handler is
-//                                FORBIDDEN — it would leak across concurrent requests.
+//   - getRequestHandler        : per-request `handleServerError`, request-scoped via React
+//                                cache(). Policy is owned by the injected DecisionSystem
+//                                (errorSystem) — there is NO active-registry binding (P3e/P5).
+//                                Module-level mutable ctx/handler is FORBIDDEN — it would leak
+//                                across concurrent requests.
 import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
-import { createHandleError, type HandleErrorOptions } from "error-core/handle-error";
-import { runWithErrorRegistry } from "error-core/active-registry";
-import type { ResolvedAppError } from "error-core/app-error";
-import type { HandleErrorDeps } from "error-core/types";
-import type { Presenter } from "error-core/telemetry";
-import type { TelemetryContext } from "error-core/telemetry";
 import {
-  noopNotifier,
-  policyGatedNotifier,
-  thresholdAlertPolicy,
-  type Notifier,
-} from "error-core/notifier";
-import { DEFAULT_ERROR_REGISTRY } from "error-core/registry";
-import { guardedCompositeReporter, type GuardedCompositeReporter } from "error-core/adapters/composite";
-import { createConsoleReporter } from "error-core/adapters/console-reporter";
+  createHandleError,
+  createErrorResponder,
+  type HandleErrorOptions,
+  type HandleErrorDeps,
+  type DecisionFailure,
+  type TelemetryContext,
+  type OccurrenceContext,
+  type ReporterSink,
+  type NotifierSink,
+} from "error-core";
+import { errorSystem } from "./error-system";
 import { createPagerNotifier, webhookPagerTransport } from "error-adapters/pager-notifier";
 
-/** Server presenter is a no-op: there is no DOM. All server handleError calls pass present:"silent". */
-const serverPresenter: Presenter = { present() {} };
-
 /**
- * Build the server alerting sink. Paging belongs to the server runtime and is gated by
- * the shared AlertPolicy. When no webhook is configured
- * (tests / local / preview), fall back to the no-op notifier so handleError never alerts.
+ * Build the server alerting sink. Paging belongs to the server runtime. The decision engine
+ * decides WHETHER to alert (decision.telemetry.alert, resolved from catalog + occurrence);
+ * this sink just delivers. When no webhook is configured (tests / local / preview), a no-op
+ * sink so handleError never pages.
  */
-const buildServerNotifier = (): Notifier => {
+const buildServerNotifier = (): NotifierSink => {
   const url = process.env.PAGER_WEBHOOK_URL;
-  return url
-    ? policyGatedNotifier(
-        thresholdAlertPolicy({ threshold: "fatal", suppressRuntimes: ["client"] }),
-        createPagerNotifier(webhookPagerTransport(url)),
-      )
-    : noopNotifier;
+  return url ? createPagerNotifier(webhookPagerTransport(url)) : { alert() {} };
 };
 
 /**
- * The guarded composite reporter, kept as its own typed handle so the health route
- * (src/app/api/health/route.ts) can read health() without widening HandleErrorDeps.
- * guardedCompositeReporter counts per-sink swallowed failures (the dead-man's-switch);
- * health().failures crossing a threshold is what the /health GET turns into a 503.
+ * Server reporter (monitoring sink): a structured stderr line keyed by code/level/correlationId.
+ * NOTE: the guarded-composite dead-man's-switch + health() (RFC §8.4) is deferred to P6/P7 on top
+ * of ReporterSink; until then the /health probe (apps, P8) has no health() to read.
  */
-export const serverReporter: GuardedCompositeReporter = guardedCompositeReporter([
-  { label: "console", reporter: createConsoleReporter() },
-]);
+export const serverReporter: ReporterSink = {
+  capture(error, decision, ctx) {
+    console.error({
+      tag: "[error]",
+      code: error.code,
+      level: decision.level,
+      correlationId: ctx.correlationId,
+      route: ctx.route,
+    });
+  },
+  breadcrumb() {},
+};
 
 /**
- * Request-independent server deps. Safe to build at module scope precisely BECAUSE it
- * carries no per-request state — user/correlation ride on the per-request ctx, not the
- * reporter. This is the ONLY place the server picks its sinks.
- *
- * G10 DEAD-MAN'S-SWITCH WIRING: serverReporter (the guarded composite) self-emits a
- * rate-limited last-resort line to stderr when a sink swallows a failure, and exposes
- * health() for the /health probe. The escalation contract is: when health().failures
- * cross the route's threshold, /health returns 503 AND the operator's uptime monitor
- * pages on the 503. To page IN-PROCESS instead (no external monitor), a host can pass
- * a CompositeReporterOptions hook that calls serverDeps.notifier.notify(...) on the
- * threshold crossing — kept OUT of this standalone build because notify() needs a
- * DomainError + severity + TelemetryContext, none of which exist at the swallow site;
- * the /health 503 + external monitor is the wired default. (See route.ts.)
+ * Request-independent server deps. Safe to build at module scope precisely BECAUSE it carries no
+ * per-request state — user/correlation ride on the per-request ctx, not the sinks. This is the
+ * ONLY place the server picks its sinks; the injected DecisionSystem (errorSystem) owns policy.
  */
 export const serverDeps: HandleErrorDeps = {
-  registry: DEFAULT_ERROR_REGISTRY,
+  system: errorSystem,
   reporter: serverReporter,
-  presenter: serverPresenter,
   notifier: buildServerNotifier(),
 };
 
+/**
+ * The bound HTTP error responder for route handlers: the single outbound leak gate. Maps any
+ * caught value to a messageless, details-gated Response (status = catalog defaultHttpStatus).
+ */
+export const errorResponder = createErrorResponder(errorSystem);
+
 /** The shape consumers destructure: `const handleServerError = await getRequestHandler()`. */
-export type HandleServerError = (
-  input: unknown,
-  options?: HandleErrorOptions,
-) => ResolvedAppError;
+export type HandleServerError = (input: unknown, options?: HandleErrorOptions) => DecisionFailure;
+
+/** The catch-all occurrence used when a boundary did not supply its own. */
+const BASE_OCCURRENCE: OccurrenceContext = {
+  operation: "unknown",
+  interaction: "event-handler",
+  uiScope: "page",
+  criticality: "normal",
+};
 
 /**
- * Session → TelemetryContext.user. MUST NOT throw or redirect (unlike a route-guard
- * verifySession): the error handler must be buildable even for anonymous/failed
- * requests. cache()d so the lookup is shared per request. This standalone build has no
- * auth provider wired, so it resolves to anonymous; swap in the host session lookup
- * (e.g. getServerSupabase().auth.getUser()) at the real composition root.
+ * Session → TelemetryContext.user. MUST NOT throw or redirect: the error handler must be
+ * buildable even for anonymous/failed requests. cache()d so the lookup is shared per request.
+ * This standalone build has no auth provider wired, so it resolves to anonymous; swap in the
+ * host session lookup at the real composition root.
  */
 const getSessionUser = cache(
   async (): Promise<NonNullable<TelemetryContext["user"]> | null> => {
@@ -108,9 +104,9 @@ const getSessionUser = cache(
 );
 
 /**
- * Request-scoped correlation ID. Honors an inbound, well-formed `x-request-id`
- * (minted by proxy.ts — §9), else mints a last-resort fallback. cache() guarantees
- * every caller within THIS request sees the same ID.
+ * Request-scoped correlation ID. Honors an inbound, well-formed `x-request-id` (minted by
+ * proxy.ts — §9), else mints a last-resort fallback. cache() guarantees every caller within
+ * THIS request sees the same ID.
  */
 export const getRequestCorrelationId = cache(async (): Promise<string> => {
   const h = await headers();
@@ -119,20 +115,21 @@ export const getRequestCorrelationId = cache(async (): Promise<string> => {
 });
 
 /**
- * Lazily build + per-request-memoize a `handleServerError`. MUST be async (awaits
- * headers() + session). The active registry is bound to this request via
- * runWithErrorRegistry so the getters resolve against serverDeps.registry for THIS
- * request only. React cache() memoizes PER REQUEST in the App Router — two concurrent
- * requests never observe each other's memoized value.
+ * Lazily build + per-request-memoize a `handleServerError`. MUST be async (awaits headers() +
+ * session). React cache() memoizes PER REQUEST in the App Router — two concurrent requests never
+ * observe each other's memoized value. Policy is owned by errorSystem; there is no per-request
+ * registry binding (P3e/P5).
  */
 export const getRequestHandler = cache(async (): Promise<HandleServerError> => {
   const [correlationId, user] = await Promise.all([
     getRequestCorrelationId(),
     getSessionUser(), // null when unauthenticated — never throws/redirects
   ]);
-  const ctx: TelemetryContext = { runtime: "server", correlationId, user };
-  const handle = createHandleError(serverDeps, ctx);
-  // Wrap so any getter read inside the returned handler resolves the request's registry.
-  return (input, options) =>
-    runWithErrorRegistry(serverDeps.registry, () => handle(input, options));
+  const ctx: TelemetryContext = { runtime: "server", operation: "unknown", correlationId, user };
+  return createHandleError(
+    serverDeps.system,
+    { reporter: serverDeps.reporter, notifier: serverDeps.notifier },
+    ctx,
+    BASE_OCCURRENCE,
+  );
 });

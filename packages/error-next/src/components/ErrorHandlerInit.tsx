@@ -1,32 +1,29 @@
 "use client";
 
 // components/ErrorHandlerInit.tsx — mounted once in app/layout.tsx (§8.1).
-// Seeds the client singleton sink with a per-request correlationId (rendered in by
-// the root layout from the proxy-set cookie/header, §9 step 3) inside useEffect —
-// never during render. The composition-root deps are assembled here from canonical
-// core symbols: the active registry, a no-op client Reporter/Notifier, and an inline
-// no-op Presenter (the real sonner presenter is wired by the host app, not the core).
+// Seeds the client singleton sink with a per-request correlationId (rendered in by the root
+// layout from the proxy-set cookie/header, §9 step 3) inside useEffect — never during render.
+// The shared baseline DecisionSystem (errorSystem) owns all policy; the client sinks are inline
+// no-ops (the real sonner reporter / pager are wired by the host app — P6/P8, via an optional
+// system/sinks prop). Presentation is the UI's job — there is no Presenter (decision model).
 
 import { useEffect } from "react";
 import { initHandleError } from "error-core/handler";
-import { getActiveErrorRegistry } from "error-core/active-registry";
-import { noopReporter } from "error-core/adapters/composite";
-import { noopNotifier } from "error-core/notifier";
-import type { HandleErrorDeps } from "error-core/types";
-import type { Presenter } from "error-core/telemetry";
+import type { HandleErrorDeps, ReporterSink, NotifierSink } from "error-core";
+import { errorSystem } from "../error-system";
 
-const noopPresenter: Presenter = { present() {} };
+const noopReporter: ReporterSink = { capture() {}, breadcrumb() {} };
+const noopNotifier: NotifierSink = { alert() {} };
 
 const buildClientDeps = (): HandleErrorDeps => ({
-  registry: getActiveErrorRegistry(),
+  system: errorSystem,
   reporter: noopReporter,
-  presenter: noopPresenter,
   notifier: noopNotifier,
 });
 
 export function ErrorHandlerInit({ correlationId }: { correlationId: string }) {
   useEffect(() => {
-    initHandleError(buildClientDeps(), correlationId);
+    initHandleError(buildClientDeps(), { correlationId });
   }, [correlationId]);
   return null;
 }
