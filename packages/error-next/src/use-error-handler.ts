@@ -36,11 +36,14 @@ export const useErrorHandler = () => {
       const result = handleError(input, opts);
       const surface = result.decision.user.surface; // resolved ErrorSurface (folds in per-call override)
 
-      if (surface === "redirect") {
-        // G9: preserve the page the user was on so post-login can bounce back.
+      // G9 + catalog 의도 보존: surface가 redirect이거나, occurrence에 따라 surface가 달라도
+      // 결정된 action이 "login"(AUTH_REQUIRED의 defaultAction)이면 로그인으로 보낸다 — 구 모델
+      // (정적 present:"redirect")의 자동 리다이렉트 UX를 컨텍스트 변화로 잃지 않는다.
+      if (surface === "redirect" || result.decision.user.action === "login") {
+        // preserve the page the user was on so post-login can bounce back.
         // The server raise() cannot read client location, so the returnTo is appended HERE.
         const returnTo = encodeURIComponent(location.pathname + location.search);
-        router.push("/login?returnTo=" + returnTo);
+        router.push((result.decision.user.target ?? "/login") + "?returnTo=" + returnTo);
         return result;
       }
       if (surface === "page") {

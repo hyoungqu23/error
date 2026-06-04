@@ -10,9 +10,10 @@
 //      value carries a NEXT_REDIRECT digest (the real contract), else returns. The
 //      real next-control-flow.ts is exercised against this mock.
 //
-// In Node, getRuntime() === "server", so the *active* registry is DEFAULT_ERROR_REGISTRY
-// (no per-request store bound): isExpectedCode("NOT_FOUND") === true,
-// isExpectedCode("HTTP_SERVER_ERROR") === false. We rely on that real intent axis.
+// In Node, getRuntime() === "server" (the server reporting path is exercised). Track-1 vs
+// Track-2 is decided by the static catalog category (P5 — the old active-registry /
+// isExpectedCode are gone): CANONICAL_ERROR_SEMANTICS["NOT_FOUND"].category === "business"
+// (→ Failure, not reported); "HTTP_SERVER_ERROR" is "fault" (→ reported + rethrown).
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
 

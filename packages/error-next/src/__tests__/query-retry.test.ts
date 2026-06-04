@@ -1,8 +1,8 @@
 // §10 retryable wiring — makeQueryClient() retry predicate + retryDelay, and withRetry().
 //
-// Runs under the `node` test environment, so getRuntime() === "server": the active
-// registry resolves to DEFAULT_ERROR_REGISTRY (no per-request store bound here), which
-// means DomainError.retryable reflects the registry table exactly as written.
+// Runs under the `node` test environment. Retry eligibility is decided by the static
+// catalog (P5 — the old active-registry / DomainError.retryable getter are gone):
+// CANONICAL_ERROR_SEMANTICS[code].defaultRetryable is the SSOT the predicates read.
 import { describe, it, expect } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
 

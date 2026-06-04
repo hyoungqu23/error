@@ -36,11 +36,14 @@ describe("ErrorFallback (§10 boundary component)", () => {
     expect(call).toBeDefined();
     // First positional arg is the error itself.
     expect(call?.[0]).toBe(error);
-    // Second arg suppresses telemetry (already reported upstream) and carries a ctx.
+    // Second arg suppresses the FULL telemetry surface (already reported upstream) + a ctx.
     const opts = call?.[1] as
-      | { telemetry?: { capture?: boolean }; ctx?: { route?: string } }
+      | {
+          telemetry?: { capture?: boolean; breadcrumb?: boolean; alert?: boolean };
+          ctx?: { route?: string };
+        }
       | undefined;
-    expect(opts).toMatchObject({ telemetry: { capture: false } });
+    expect(opts).toMatchObject({ telemetry: { capture: false, breadcrumb: false, alert: false } });
     // route is folded into TelemetryContext via ctx (location.pathname in jsdom).
     expect(opts?.ctx).toMatchObject({ route: expect.any(String) });
   });
