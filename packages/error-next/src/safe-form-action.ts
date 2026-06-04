@@ -5,11 +5,12 @@
 // adaptation (raw FormData → plain object before Zod parse).
 import "server-only";
 import { z } from "zod";
-import { isDomainError, isExpectedCode } from "error-core/app-error";
+import { isAppError, isKnownErrorCode, CANONICAL_ERROR_SEMANTICS } from "error-core";
+import { actionSuccess, degrade, type Result } from "error-core/result";
 import { makeError } from "error-core/make-error";
 import { rethrowControlFlow } from "./next-control-flow";
 import { getRequestHandler } from "./request-handler.server";
-import { actionSuccess, actionFailure, type Result } from "error-core/result";
+import { errorSystem } from "./error-system";
 
 /** The state useActionState holds for a form: a prior Result, or null before first submit. */
 export type FormState<R> = Result<R> | null;
@@ -37,6 +38,12 @@ export const safeFormAction =
     action: (input: z.infer<S>, prevState: FormState<R>) => Promise<R>,
   ) =>
   async (prevState: FormState<R>, formData: FormData): Promise<Result<R>> => {
+    // Boundary occurrence: a form submission surfaced at the form scope.
+    const occurrence = errorSystem.makeOccurrence("unknown", {
+      interaction: "form-submit",
+      uiScope: "form",
+    });
+
     let parsed: z.SafeParseReturnType<unknown, z.infer<S>>;
     try {
       // Preserve duplicate field names as arrays; Zod owns coercion/refinement.
@@ -45,18 +52,24 @@ export const safeFormAction =
       // safeParse never throws; a throw here is a programmer/runtime fault → unexpected path.
       rethrowControlFlow(error);
       const handleServerError = await getRequestHandler();
-      handleServerError(error, { present: "silent" });
+      handleServerError(error);
       throw error;
     }
 
     if (!parsed.success) {
-      return actionFailure(
-        makeError({
-          code: "VALIDATION",
-          details: {
-            fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-          },
-        }),
+      // Validation failure → finalize to a wire payload through the leak gate. finalizeUnknown
+      // resolves the decision + payload only — no telemetry runs (Track-1 is never reported).
+      return degrade<R>(
+        errorSystem.finalizeUnknown(
+          makeError({
+            code: "VALIDATION",
+            details: {
+              fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+            },
+          }),
+          occurrence,
+          { runtime: "server" },
+        ),
       );
     }
 
@@ -65,12 +78,17 @@ export const safeFormAction =
     } catch (error) {
       // 1. NEVER swallow framework control flow (redirect/notFound/forbidden/unauthorized).
       rethrowControlFlow(error);
-      // 2. Expected business error → return as Failure (serialization-safe, crosses to client).
-      if (isDomainError(error) && isExpectedCode(error.code)) return actionFailure(error);
-      // 3. Unexpected → report on the per-request handler (server presenter no-op), then re-throw.
-      // present:"silent" — server has no DOM; the client surfaces + breadcrumbs the impact.
+      // 2. Track 1: expected business error (catalog category "business") → Failure, NOT reported.
+      if (
+        isAppError(error) &&
+        isKnownErrorCode(error.code) &&
+        CANONICAL_ERROR_SEMANTICS[error.code].category === "business"
+      ) {
+        return degrade<R>(errorSystem.finalizeUnknown(error, occurrence, { runtime: "server" }));
+      }
+      // 3. Track 2: unexpected → report on the per-request handler (telemetry runs), re-throw.
       const handleServerError = await getRequestHandler();
-      handleServerError(error, { present: "silent" });
+      handleServerError(error);
       throw error;
     }
   };

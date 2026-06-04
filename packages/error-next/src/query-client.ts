@@ -3,20 +3,23 @@
 // retry:3 from retrying 404s and other non-retryable codes.
 "use client";
 import { QueryClient, type QueryClientConfig } from "@tanstack/react-query";
-import { isDomainError } from "error-core/app-error";
+import { isAppError, isKnownErrorCode, CANONICAL_ERROR_SEMANTICS } from "error-core";
 import { computeRetryDelay, DEFAULT_BACKOFF, type BackoffConfig } from "error-core/backoff";
 
 /** Max retry ATTEMPTS for retryable errors (count is 0-based per TanStack). */
 export const MAX_QUERY_RETRIES = 3;
 
 /**
- * Shared retry predicate. NON-DomainErrors are NOT retried; a DomainError is retried only
- * while `err.retryable` is true AND under the attempt cap.
- *   - NOT_FOUND (retryable:false) → false → NEVER retried (fixes default retry:3).
- *   - RATE_LIMITED / TIMEOUT / OFFLINE / NETWORK_ERROR / HTTP_SERVER_ERROR (retryable:true) → retried.
+ * Shared retry predicate. NON-AppErrors are NOT retried; an AppError is retried only while
+ * its catalog `defaultRetryable` is true AND under the attempt cap.
+ *   - NOT_FOUND (defaultRetryable:false) → false → NEVER retried (fixes default retry:3).
+ *   - RATE_LIMITED / TIMEOUT / OFFLINE / NETWORK_ERROR / HTTP_SERVER_ERROR (defaultRetryable:true) → retried.
  */
 export const shouldRetryQuery = (failureCount: number, error: unknown): boolean =>
-  isDomainError(error) && error.retryable && failureCount < MAX_QUERY_RETRIES;
+  isAppError(error) &&
+  isKnownErrorCode(error.code) &&
+  CANONICAL_ERROR_SEMANTICS[error.code].defaultRetryable &&
+  failureCount < MAX_QUERY_RETRIES;
 
 export const buildQueryClientConfig = (
   backoff: BackoffConfig = DEFAULT_BACKOFF,
@@ -30,7 +33,7 @@ export const buildQueryClientConfig = (
       // Mutations are the Result track (§8.4): a thrown mutation error is unexpected. Honor
       // retryable for transient infra faults, but default to ~0 retries to avoid double-submitting.
       retry: (failureCount, error) =>
-        isDomainError(error) && error.retryable && error.code === "OFFLINE" && failureCount < 1,
+        isAppError(error) && error.code === "OFFLINE" && failureCount < 1,
       retryDelay: (attempt, error) => computeRetryDelay(attempt, error, backoff),
     },
   },

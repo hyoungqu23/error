@@ -20,7 +20,7 @@ import { useContext, useEffect, useRef, useTransition } from "react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { resolveErrorMessage } from "error-core/translator";
 import { handleError } from "error-core/handler";
-import { isDomainError } from "error-core/app-error";
+import { isAppError, isKnownErrorCode, CANONICAL_ERROR_SEMANTICS } from "error-core";
 
 type RetryProp = { unstable_retry?: () => void; reset?: () => void };
 
@@ -43,9 +43,12 @@ export function ErrorFallback({
     // init) is bypassed; handleError() throws if initHandleError() never ran. Swallow it
     // so the fallback still renders real copy instead of cascading into a render crash.
     try {
-      // log:"none" → already reported at the server/network boundary (no duplicate).
+      // telemetry suppressed → already reported at the server/network boundary (no duplicate).
       // `route` is folded into the per-call TelemetryContext via `ctx`.
-      handleError(error, { log: "none", ctx: { route: location.pathname } });
+      handleError(error, {
+        telemetry: { capture: false, breadcrumb: false, alert: false },
+        ctx: { route: location.pathname },
+      });
     } catch {
       // intentionally silent — the boundary's job is to RENDER, not to re-report.
     }
@@ -77,19 +80,23 @@ export function ErrorFallback({
   // (b) run retry inside a transition so the button can reflect a pending/disabled state.
   const onRetry = () => startTransition(retry);
 
-  // For RSC prod errors the raw `error.message` is a placeholder. Prefer a registry
-  // userMessageKey resolved to copy; otherwise a static localized line. The
+  // For RSC prod errors the raw `error.message` is a placeholder. Prefer the catalog
+  // defaultMessageKey resolved to copy; otherwise a static localized line. The
   // provider-free `resolveErrorMessage` never returns the raw key and never throws,
   // so both the normal (`error.tsx`) and `minimal` (`global-error.tsx`) paths render
   // real copy without any React context translator.
-  const title = isDomainError(error)
-    ? resolveErrorMessage(error.userMessageKey)
-    : resolveErrorMessage("error.unknown");
+  const title =
+    isAppError(error) && isKnownErrorCode(error.code)
+      ? resolveErrorMessage(CANONICAL_ERROR_SEMANTICS[error.code].defaultMessageKey)
+      : resolveErrorMessage("error.unknown");
 
-  // (d) only offer a retry when a retry is meaningful. A DomainError carries the
-  // resolved `retryable` off the active registry; a non-DomainError (raw render crash)
-  // is always offered the affordance (reset/reload may recover a transient render fault).
-  const canRetry = isDomainError(error) ? error.retryable : true;
+  // (d) only offer a retry when a retry is meaningful. A known AppError uses its catalog
+  // `defaultRetryable`; a non-AppError (raw render crash) is always offered the affordance
+  // (reset/reload may recover a transient render fault).
+  const canRetry =
+    isAppError(error) && isKnownErrorCode(error.code)
+      ? CANONICAL_ERROR_SEMANTICS[error.code].defaultRetryable
+      : true;
 
   return (
     <div role="alert" ref={alertRef} tabIndex={-1}>

@@ -1,0 +1,31 @@
+// error-next/src/error-system.ts — error-next의 baseline DecisionSystem(정책 SSOT).
+//
+// P3e에서 active-registry/DEFAULT_ERROR_REGISTRY가 사라진 뒤, 정책의 단일 출처는
+// createDecisionSystem으로 만든 DecisionSystem 인스턴스다 (D-P5-1, 옵션1: 내부 공유 baseline).
+// 서버 root(request-handler.server)·클라 root(ErrorHandlerInit)가 이 인스턴스를 공유한다.
+//
+// client-safe: 순수 데이터/함수만 import한다 — server-only·next·벤더 SDK 없음 — 그래야
+// 'use client' 컴포넌트(ErrorHandlerInit)에서도 평가 안전하다.
+//
+// 실제 도메인 operations 카탈로그는 P8에서 host 앱이 주입한다(ErrorHandlerInit/request-handler에
+// optional system prop을 더하는 상위호환 경로). P5 un-red에는 이 baseline으로 충분하다.
+import { createDecisionSystem, CANONICAL_ERROR_SEMANTICS, type OperationCatalog } from "error-core";
+
+// Baseline operations — fallback 1개("unknown"). boundary들은 makeOccurrence 대신 occurrence를
+// operation:"unknown"으로 직접 구성하므로 P5에서는 이 1개로 충분하다(도메인 operations는 P8).
+const operations = {
+  unknown: {
+    operation: "unknown",
+    owner: "platform",
+    criticality: "normal",
+    defaultUiScope: "page",
+    piiRisk: false,
+  },
+} satisfies OperationCatalog;
+
+/** 공유 DecisionSystem. 카탈로그(CANONICAL_ERROR_SEMANTICS)가 모든 정책을 소유한다. */
+export const errorSystem = createDecisionSystem({
+  errors: CANONICAL_ERROR_SEMANTICS,
+  operations,
+  fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+});

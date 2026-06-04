@@ -5,7 +5,7 @@
 // Action·Route Handler·요청별 핸들러)은 `error-next/server`에 분리되어 있다.
 
 // 1) core의 클라이언트 안전 표면 전량 재노출(makeError, Result, resolveErrorMessage,
-//    handleError/initHandleError, isDomainError, fieldErrorsFromError, 텔레메트리 계약 …).
+//    handleError/initHandleError, isAppError, fieldErrorsFromError, 텔레메트리 계약 …).
 export * from "error-core";
 
 // 2) React/Next 클라이언트 통합.
@@ -17,6 +17,5 @@ export {
   shouldRetryQuery,
   MAX_QUERY_RETRIES,
 } from "./query-client";
-export { ErrorRegistryProvider, useErrorRegistry } from "./registry-context";
 export { ErrorFallback } from "./components/ErrorFallback";
 export { ErrorHandlerInit } from "./components/ErrorHandlerInit";
