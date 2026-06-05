@@ -119,7 +119,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
     const expectedErr = makeError({ code: "NOT_FOUND", details: { resource: "secret-table" } });
     const action = safeFormAction(schema, async (_data: In) => {
       throw expectedErr;
-      // eslint-disable-next-line no-unreachable
+       
       return { id: "" };
     });
 
@@ -139,7 +139,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
     const boom = new Error("db exploded");
     const action = safeFormAction(schema, async (_data: In) => {
       throw boom;
-      // eslint-disable-next-line no-unreachable
+       
       return { id: "" };
     });
 
@@ -153,7 +153,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
     const serverErr = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
     const action = safeFormAction(schema, async (_data: In) => {
       throw serverErr;
-      // eslint-disable-next-line no-unreachable
+       
       return { id: "" };
     });
 
@@ -167,7 +167,7 @@ describe("safeFormAction — §10 mutation Result path", () => {
     const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: REDIRECT_DIGEST });
     const action = safeFormAction(schema, async (_data: In) => {
       throw redirect;
-      // eslint-disable-next-line no-unreachable
+       
       return { id: "" };
     });
 
