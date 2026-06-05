@@ -18,6 +18,8 @@ import { headers } from "next/headers";
 import {
   createHandleError,
   createErrorResponder,
+  guardedCompositeReporter,
+  type GuardedCompositeReporter,
   type HandleErrorOptions,
   type HandleErrorDeps,
   type DecisionFailure,
@@ -40,12 +42,8 @@ const buildServerNotifier = (): NotifierSink => {
   return url ? createPagerNotifier(webhookPagerTransport(url)) : { alert() {} };
 };
 
-/**
- * Server reporter (monitoring sink): a structured stderr line keyed by code/level/correlationId.
- * NOTE: the guarded-composite dead-man's-switch + health() (RFC §8.4) is deferred to P6/P7 on top
- * of ReporterSink; until then the /health probe (apps, P8) has no health() to read.
- */
-export const serverReporter: ReporterSink = {
+/** Console monitoring sink (no SDK): a structured stderr line keyed by code/level/correlationId. */
+const consoleReporter: ReporterSink = {
   capture(error, decision, ctx) {
     console.error({
       tag: "[error]",
@@ -57,6 +55,16 @@ export const serverReporter: ReporterSink = {
   },
   breadcrumb() {},
 };
+
+/**
+ * The guarded composite reporter (P6 — dead-man's-switch restored on ReporterSink), kept as its
+ * own typed handle so the health route (apps, P8) can read health() without widening
+ * HandleErrorDeps. guardedCompositeReporter counts per-sink swallowed failures (G10);
+ * health().failures crossing a threshold is what the /health GET turns into a 503.
+ */
+export const serverReporter: GuardedCompositeReporter = guardedCompositeReporter([
+  { label: "console", reporter: consoleReporter },
+]);
 
 /**
  * Request-independent server deps. Safe to build at module scope precisely BECAUSE it carries no
