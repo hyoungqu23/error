@@ -78,6 +78,9 @@ describe("sentryBeforeSend", () => {
       exception: {
         values: [{ value: "token abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJK leaked" }],
       },
+      // P7: telemetry escape hatch(수동 tags/fingerprint override) 경유 누출의 마지막 방어선.
+      tags: { authorization: "Bearer top.secret.tok", plain: "ok" },
+      fingerprint: ["checkout", "Bearer abc.def.ghi"],
     } as unknown as Parameters<typeof sentryBeforeSend>[0]);
 
     expect(event).not.toBeNull();
@@ -91,6 +94,10 @@ describe("sentryBeforeSend", () => {
     expect(event?.request?.cookies).toBeUndefined();
     expect(event?.message).toBe("failed with [redacted-token]");
     expect(event?.exception?.values?.[0]?.value).toContain("[redacted-token]");
+    expect(event?.tags?.authorization).toBe("[redacted]");
+    expect(event?.tags?.plain).toBe("ok");
+    expect(JSON.stringify(event?.fingerprint)).not.toContain("abc.def.ghi");
+    expect(event?.fingerprint?.[0]).toBe("checkout");
   });
 });
 

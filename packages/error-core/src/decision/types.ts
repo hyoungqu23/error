@@ -112,6 +112,10 @@ export interface RuntimeContext {
   runtime: "server" | "client";
   route?: string;
   user?: { id: string; role?: string } | null;
+  /**
+   * 불투명한 요청/트레이스 식별자(UUID·request-id)여야 한다 — 사용자 식별자/PII 금지.
+   * fault 계열에서 supportCode로 ClientErrorPayload(wire)에 노출된다(resolve §5.3).
+   */
   correlationId?: string;
   traceId?: string;
 }

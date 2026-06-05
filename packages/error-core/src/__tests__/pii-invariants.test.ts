@@ -31,8 +31,8 @@ describe("§8-5 PII invariants (P7)", () => {
       const s: ErrorSemantics = CANONICAL_ERROR_SEMANTICS[code];
       const keys = [s.defaultMessageKey, ...Object.values(s.messageKeys ?? {})];
       for (const key of keys) {
-        // i18n 키 형태 강제 — 자유 텍스트(=PII 운반 가능)가 키 자리에 들어올 수 없다.
-        expect(key).toMatch(/^error\.[a-zA-Z.]+$/);
+        // i18n 키 형태 강제 — 자유 텍스트(공백/'@' = PII 운반 가능)가 키 자리에 들어올 수 없다.
+        expect(key).toMatch(/^error\.[a-zA-Z0-9._-]+$/);
       }
       expect(EMAIL_RE.test(FALLBACK_MESSAGES[code])).toBe(false);
       expect(TOKEN_RE.test(FALLBACK_MESSAGES[code])).toBe(false);
@@ -58,8 +58,8 @@ describe("§8-5 PII invariants (P7)", () => {
         fingerprint: decision.telemetry.fingerprint,
         tags: decision.telemetry.tags,
       });
-      expect(telemetryWire).not.toContain(PII_EMAIL);
-      expect(telemetryWire).not.toContain("Bearer ");
+      expect(EMAIL_RE.test(telemetryWire)).toBe(false);
+      expect(TOKEN_RE.test(telemetryWire)).toBe(false);
       // 고정 어휘 — fingerprint는 [operation, code, interaction], tags 키 집합은 결정 입력의
       // 분류 축뿐이다. message/details 값은 구조적으로 들어올 수 없다.
       expect(decision.telemetry.fingerprint).toEqual(["checkout", code, "mutation"]);
@@ -99,8 +99,8 @@ describe("§8-5 PII invariants (P7)", () => {
 
       expect("message" in failure.payload).toBe(false);
       const wire = JSON.stringify(failure.payload);
-      expect(wire).not.toContain(PII_EMAIL);
-      expect(wire).not.toContain("Bearer ");
+      expect(EMAIL_RE.test(wire)).toBe(false);
+      expect(TOKEN_RE.test(wire)).toBe(false);
     }
   });
 });

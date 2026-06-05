@@ -20,6 +20,7 @@ export default tseslint.config(
     ],
   },
   {
+    // 가드 스코프는 packages/*/src/** — "출하 코드는 전부 src/ 아래"가 이 워크스페이스의 불변이다.
     files: ["packages/*/src/**/*.{ts,tsx}"],
     languageOptions: {
       parser: tseslint.parser,
@@ -63,7 +64,18 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.name='toast'] MemberExpression[property.name='message']",
           message:
-            "toast(error.message) 금지 — Presenter(createSonnerPresenter)가 user.messageKey를 해소합니다 (RFC §8).",
+            "toast(...) 인자에서 .message 접근 금지(어디서든) — Presenter(createSonnerPresenter)가 user.messageKey를 해소합니다 (RFC §8).",
+        },
+        // 정적 import만 보는 no-restricted-imports의 사각지대 — 동적 import()/require() 우회 봉쇄.
+        {
+          selector: "ImportExpression > Literal[value=/^(sonner|@sentry\\u002F)/]",
+          message:
+            "벤더 SDK 동적 import() 금지 — sonner/@sentry는 error-adapters만 import합니다 (RFC §8).",
+        },
+        {
+          selector: "CallExpression[callee.name='require'] > Literal[value=/^(sonner|@sentry\\u002F)/]",
+          message:
+            "벤더 SDK require() 금지 — sonner/@sentry는 error-adapters만 import합니다 (RFC §8).",
         },
       ],
     },
