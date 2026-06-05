@@ -12,6 +12,7 @@ import {
 } from "@/error/translator";
 import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";
 import type { ErrorCode } from "@/error/decision/codes";
+import type { ErrorSemantics } from "@/error/decision/types";
 
 const ALL_CODES = Object.keys(CANONICAL_ERROR_SEMANTICS) as ErrorCode[];
 
@@ -161,6 +162,21 @@ describe("§10.3 i18n fallback completeness (CI guard)", () => {
     expect(out).toBe(FALLBACK_MESSAGES.RATE_LIMITED);
     expect(out).not.toBe("error.rateLimited");
     expect(out).not.toBe("RATE_LIMITED");
+  });
+
+  // ── P2: disclosure-레벨 messageKeys 전수 해소 — error.support처럼 코드 비대응 키가
+  //    어떤 메시지 맵에도 없으면 support-only UX 전체가 generic으로 조용히 강등된다.
+  it("every catalog messageKeys[*] value resolves to real, non-generic copy (incl. error.support)", () => {
+    for (const code of ALL_CODES) {
+      const s: ErrorSemantics = CANONICAL_ERROR_SEMANTICS[code];
+      for (const key of Object.values(s.messageKeys ?? {})) {
+        const msg = resolveErrorMessage(key);
+        expect(msg.length).toBeGreaterThan(0);
+        expect(msg).not.toBe(key); // raw 키 에코 금지
+      }
+    }
+    // error.support는 GENERIC_FALLBACK이 아니라 전용 카피(참조 코드 안내)로 해소돼야 한다.
+    expect(resolveErrorMessage("error.support")).not.toBe(GENERIC_FALLBACK);
   });
 
   it("RATE_LIMITED vars are forwarded to a host Translator unchanged", () => {

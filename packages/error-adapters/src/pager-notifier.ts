@@ -24,7 +24,10 @@ const toPageEvent = (
   level: TelemetryDecision["level"],
   ctx: TelemetryContext,
 ): PageEvent => ({
-  title: `[${level.toUpperCase()}] ${error.code}: ${error.message}`,
+  // PII(P2 리뷰): error.message는 싣지 않는다 — 정규화된 unexpected 에러의 message는 raw 업스트림
+  // 예외 텍스트(DSN/경로/이메일 등)일 수 있고 이 webhook 경로엔 스크럽이 없다. pager는 호출
+  // 신호(code/level/correlationId)만 나르고, 상세는 Sentry(beforeSend 스크럽 경유)가 담당한다.
+  title: `[${level.toUpperCase()}] ${error.code}`,
   severity: level,
   code: error.code,
   correlationId: ctx.correlationId,

@@ -23,9 +23,20 @@ const operations = {
   },
 } satisfies OperationCatalog;
 
-/** 공유 DecisionSystem. 카탈로그(CANONICAL_ERROR_SEMANTICS)가 모든 정책을 소유한다. */
+/** 서버 측 DecisionSystem(request-handler가 사용). 카탈로그가 모든 정책을 소유한다. */
 export const errorSystem = createDecisionSystem({
   errors: CANONICAL_ERROR_SEMANTICS,
   operations,
   fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+});
+
+/**
+ * 클라이언트 측 DecisionSystem(ErrorHandlerInit/클라 컴포지션 루트가 사용) — fallback만 다르다.
+ * (P2 리뷰: 단일 시스템의 UNKNOWN_SERVER_ERROR 고정 fallback이 브라우저 unknown 예외를
+ *  서버 fault로 오분류하던 버그 수정.)
+ */
+export const clientErrorSystem = createDecisionSystem({
+  errors: CANONICAL_ERROR_SEMANTICS,
+  operations,
+  fallbackErrorCode: "UNKNOWN_CLIENT_ERROR",
 });

@@ -33,7 +33,11 @@ export const buildQueryClientConfig = (
       // Mutations are the Result track (§8.4): a thrown mutation error is unexpected. Honor
       // retryable for transient infra faults, but default to ~0 retries to avoid double-submitting.
       retry: (failureCount, error) =>
-        isAppError(error) && error.code === "OFFLINE" && failureCount < 1,
+        // 카탈로그가 SSOT — OFFLINE이 향후 non-retryable로 바뀌면 이 분기도 함께 닫힌다.
+        isAppError(error) &&
+        error.code === "OFFLINE" &&
+        CANONICAL_ERROR_SEMANTICS.OFFLINE.defaultRetryable &&
+        failureCount < 1,
       retryDelay: (attempt, error) => computeRetryDelay(attempt, error, backoff),
     },
   },

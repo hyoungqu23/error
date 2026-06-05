@@ -50,9 +50,13 @@ export const handleError = (input: unknown, opts?: HandleErrorOptions): Decision
       "initHandleError() not called: mount <ErrorHandlerInit /> once in app/layout.tsx before using handleError().",
     );
   }
-  return _handle(input, opts);
+  // P2(리뷰 ×5 패스): user는 호출 시점에 주입 — init 시 캡처만 하면 로그인 후 setErrorUser가
+  // 이미 빌드된 클로저(baseCtx.user)에 닿지 못해 텔레메트리가 영원히 익명이었다.
+  // 호출자가 opts.ctx.user를 명시하면 그쪽이 이긴다(스프레드 순서).
+  return _handle(input, { ...opts, ctx: { user: _user, ...opts?.ctx } });
 };
 
+/** 로그인/로그아웃 시 호출 — 이후의 모든 handleError ctx.user에 즉시 반영된다. */
 export const setErrorUser = (user: { id: string; role?: string } | null): void => {
   _user = user;
 };

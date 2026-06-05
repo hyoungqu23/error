@@ -9,6 +9,7 @@ import * as Sentry from "@sentry/nextjs";
 import {
   CANONICAL_ERROR_SEMANTICS,
   isKnownErrorCode,
+  pickAllowlistedDetails,
   type ReporterSink,
   type TelemetryContext,
   type TelemetryDecision,
@@ -24,13 +25,8 @@ const gateClientDetails = (code: string, details: unknown): unknown => {
   if (!isKnownErrorCode(code)) return undefined;
   const semantics: ErrorSemantics = CANONICAL_ERROR_SEMANTICS[code];
   const allowlist = semantics.detailsExposure === "allowlist" ? semantics.detailsAllowlist : undefined;
-  if (!allowlist?.length || typeof details !== "object" || details === null) return undefined;
-  const source = details as Record<string, unknown>;
-  const picked: Record<string, unknown> = {};
-  for (const key of allowlist) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) picked[key] = source[key];
-  }
-  return Object.keys(picked).length > 0 ? picked : undefined;
+  // 클라 DTO를 게이트하는 것과 동일한 단일 구현(error-core pickAllowlistedDetails) — drift 불가.
+  return pickAllowlistedDetails(details, allowlist);
 };
 
 // @sentry/nextjs v8 SeverityLevel is "fatal"|"error"|"warning"|"log"|"info"|"debug".

@@ -1,5 +1,5 @@
 // error/translator.ts
-// i18n for `userMessageKey` (design §6.3), flattened to a single module per the
+// i18n for catalog message keys (design §6.3), flattened to a single module per the
 // canonical module map. The error core depends only on the tiny `Translator` seam;
 // vendor i18n knowledge would live in opt-in adapters (not shipped today — the live
 // project is Korean-only). Invariant: the raw key is NEVER rendered; resolveErrorMessage
@@ -25,7 +25,7 @@ export interface Translator {
 
 /**
  * CO-LOCATED fallback map, typed `Record<ErrorCode, string>` so a missing (or extra)
- * ErrorCode is a COMPILE error. A missing userMessageKey can never reach runtime.
+ * ErrorCode is a COMPILE error. A missing defaultMessageKey can never reach runtime.
  * Default-locale (Korean) column — the only locale shipping today.
  */
 export const FALLBACK_MESSAGES = {
@@ -47,6 +47,15 @@ export const FALLBACK_MESSAGES = {
 } as const satisfies Record<ErrorCode, string>;
 
 const GENERIC_FALLBACK = "알 수 없는 오류가 발생했습니다.";
+
+/**
+ * 코드 비대응 disclosure-레벨 키(catalog `messageKeys` 전용)의 코로케이트 폴백.
+ * (P2 수정: fault 4코드의 messageKeys["support-only"]가 "error.support"를 가리키지만 어떤
+ * 메시지 맵에도 카피가 없어 support-only disclosure 전체가 generic으로 강등되던 버그.)
+ */
+const DISCLOSURE_FALLBACK_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
+  "error.support": "문제가 지속되면 아래 참조 코드와 함께 문의해주세요.",
+});
 
 /** Reverse index: defaultMessageKey string → ErrorCode. Built once from the canonical catalog. */
 const KEY_TO_CODE: Readonly<Record<string, ErrorCode>> = Object.freeze(
@@ -72,8 +81,9 @@ const interpolate = (template: string, vars?: TranslateVars): string =>
  */
 const fallbackMessage = (key: string, vars?: TranslateVars): string | undefined => {
   const code = KEY_TO_CODE[key] ?? (key in FALLBACK_MESSAGES ? (key as ErrorCode) : undefined);
-  if (code === undefined) return undefined;
-  return interpolate(FALLBACK_MESSAGES[code], vars);
+  if (code !== undefined) return interpolate(FALLBACK_MESSAGES[code], vars);
+  const disclosureCopy = DISCLOSURE_FALLBACK_MESSAGES[key];
+  return disclosureCopy !== undefined ? interpolate(disclosureCopy, vars) : undefined;
 };
 
 /**

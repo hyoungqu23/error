@@ -9,14 +9,14 @@
 
 import { useEffect } from "react";
 import { initHandleError } from "error-core/handler";
-import type { HandleErrorDeps, ReporterSink, NotifierSink } from "error-core";
-import { errorSystem } from "../error-system";
+import { noopReporter, type HandleErrorDeps, type NotifierSink } from "error-core";
+import { clientErrorSystem } from "../error-system";
 
-const noopReporter: ReporterSink = { capture() {}, breadcrumb() {} };
 const noopNotifier: NotifierSink = { alert() {} };
 
 const buildClientDeps = (): HandleErrorDeps => ({
-  system: errorSystem,
+  // 클라 fallback은 UNKNOWN_CLIENT_ERROR — 브라우저 unknown 예외를 서버 fault로 오분류하지 않는다.
+  system: clientErrorSystem,
   reporter: noopReporter,
   notifier: noopNotifier,
 });

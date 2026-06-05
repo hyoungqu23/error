@@ -51,6 +51,7 @@ export {
   type LabeledReporter,
   type CompositeReporterOptions,
 } from "./adapters/composite";
+export { createConsoleReporter } from "./adapters/console-reporter";
 
 // ── 정규화 + 헬퍼 ───────────────────────────────────────────────────────────
 export { normalizeToAppError } from "./normalize";
