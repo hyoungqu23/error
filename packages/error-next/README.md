@@ -14,7 +14,7 @@
 - `makeQueryClient` / `shouldRetryQuery` — TanStack QueryClient 기본(catalog `defaultRetryable` 배선).
 - `ErrorFallback` — 공유 렌더링 경계 UI(`unstable_retry` ?? `reset` ?? reload).
 - `ErrorHandlerInit` — 클라 싱글턴 sink 부트스트랩(no-op sink 기본).
-- `errorSystem` — 공유 baseline DecisionSystem(host가 자기 `HandleErrorDeps`를 조립할 때 주입).
+- `errorSystem` / `clientErrorSystem` — 공유 baseline DecisionSystem(host가 자기 `HandleErrorDeps`를 조립할 때 주입). 둘은 fallback 코드만 다르다 — 서버 조립에는 `errorSystem`(`UNKNOWN_SERVER_ERROR`), 클라이언트 조립(`ErrorHandlerInit`, 브라우저 컴포지션 루트)에는 `clientErrorSystem`(`UNKNOWN_CLIENT_ERROR`)을 주입한다.
 - (+ `error-core`의 `makeError`, `Result`/`degrade`, `resolveErrorMessage`, `handleError`, `isAppError`, `CANONICAL_ERROR_SEMANTICS`, `fieldErrorsFromError` …)
 
 ### `error-next/server` (서버 전용)
@@ -41,5 +41,5 @@
 ## 테스트
 
 ```bash
-pnpm --filter error-next test   # 37 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
+pnpm --filter error-next test   # 42 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
 ```

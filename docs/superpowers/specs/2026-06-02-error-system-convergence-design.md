@@ -3,7 +3,7 @@
 - 상태: Draft (검토 대기)
 - 작성일: 2026-06-02
 - 범위: `packages/error-core`, `packages/error-adapters`, `packages/error-next`, `packages/error-decision-system` 및 `apps/*`
-- 선행 문서: `NEW.md`, `NEW_DX.md`, `ERROR_DECISION_SYSTEM.md`, `ERROR_DECISION_SYSTEM_REVIEW.md`
+- 선행 문서: `docs/history/NEW.md`, `docs/history/NEW_DX.md`, `docs/history/ERROR_DECISION_SYSTEM.md`, `docs/history/ERROR_DECISION_SYSTEM_REVIEW.md`
 
 ---
 

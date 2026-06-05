@@ -71,13 +71,13 @@ export default tseslint.config(
   },
   {
     // 벤더 룰 제외(격리 원칙의 '안쪽'): 어댑터 본체, 테스트(SDK mock/fixture), 그리고 앱의
-    // 컴포지션 지점 — Toaster 마운트(providers.tsx)와 Sentry.init 지점(instrumentation*).
+    // 컴포지션 지점 — Toaster 마운트(providers.tsx).
+    // (Sentry 배선 시 instrumentation*.{ts,tsx}를 여기 추가 — 현재 데모 앱은 Sentry 미배선.)
     files: [
       "packages/error-adapters/src/**/*.{ts,tsx}",
       "packages/*/src/**/__tests__/**/*.{ts,tsx}",
       "packages/*/src/**/*.test.{ts,tsx}",
       "apps/error-architecture/app/providers.tsx",
-      "apps/error-architecture/instrumentation*.{ts,tsx}",
     ],
     rules: {
       "no-restricted-imports": "off",

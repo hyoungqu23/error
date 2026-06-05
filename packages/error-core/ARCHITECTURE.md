@@ -1,6 +1,6 @@
 # `error-core` 파일 가이드 — 결정(decision) 모델
 
-통합 에러 시스템의 커널 구현체다(설계: [`docs/superpowers/specs/2026-06-02-error-system-convergence-design.md`](../../docs/superpowers/specs/2026-06-02-error-system-convergence-design.md), 정합성: `tsc --noEmit` 0 · vitest 296/0). 구 레지스트리 스택(DomainError 정책 getter · active-registry ALS · zod schema · Reporter/Presenter/Notifier)은 수렴(P0–P8)에서 **결정 모델**로 대체·삭제됐다.
+통합 에러 시스템의 커널 구현체다(설계: [`docs/superpowers/specs/2026-06-02-error-system-convergence-design.md`](../../docs/superpowers/specs/2026-06-02-error-system-convergence-design.md), 정합성: `tsc --noEmit` 0 · vitest 303/0). 구 레지스트리 스택(DomainError 정책 getter · active-registry ALS · zod schema · Reporter/Presenter/Notifier)은 수렴(P0–P8)에서 **결정 모델**로 대체·삭제됐다.
 
 > 공개 표면은 배럴 1개다 — `import { … } from "error-core"`. 세부 모듈 deep import(`error-core/decision/app-error`, `error-core/translator` …)도 가능하다.
 

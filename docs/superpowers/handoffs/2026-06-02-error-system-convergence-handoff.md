@@ -13,7 +13,7 @@
 - RFC(설계): `docs/superpowers/specs/2026-06-02-error-system-convergence-design.md` — 12장 + 잠긴 결정. **먼저 읽을 것.**
 - 구현 계획: `docs/superpowers/plans/2026-06-02-error-system-convergence-{p0-p2,p3a,p3b,p3b-ii,p3c}.md`. **잠긴 결정 D1–D7은 p3a 계획 문서**에 정의.
 - 작업 메모리: `~/.claude/projects/-Users-hm2-Private-error-system/memory/error-system-convergence.md` (진행도 상태 — 매 phase 갱신해 옴).
-- 신 시스템 설계 원본: `ERROR_DECISION_SYSTEM.md`, `NEW.md`, `NEW_DX.md`.
+- 신 시스템 설계 원본: `docs/history/ERROR_DECISION_SYSTEM.md`, `docs/history/NEW.md`, `docs/history/NEW_DX.md`.
 
 ## 완료 (전부 opus/sonnet 2단계 리뷰 통과, sound)
 P0–P2(엔진/카탈로그/validateCatalog를 `error-core/src/decision/`에 비파괴 이식) · P3a(순수데이터 `AppError`+`createDecisionSystem` 팩토리 비파괴 착륙) · P3b-i(field-errors/retry-after를 `isAppError`로) · **P3b-ii**(인바운드 원자 컷: make-error/normalize→AppError, handle-error를 `createDecisionSystem` 위임자로 재작성, D1 카탈로그 validateDetails, D2 frozen code-set guards) · **P3c**(아웃바운드 컷: `serialize-client.ts` 삭제→`decision/system.toClientErrorPayload` 단일 누출게이트, result `degrade`(D3), route-handler `createErrorResponder`, network-boundary AppError+D2).

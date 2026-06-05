@@ -46,7 +46,7 @@ error-core  ◄──  error-adapters  ◄──  error-next  ◄──  apps/er
 pnpm install              # 워크스페이스 전체 설치 (pnpm 11+)
 
 pnpm typecheck            # turbo: 3개 패키지 + 앱 tsc --noEmit
-pnpm test                 # turbo: 354개 테스트 (core 296 · adapters 21 · next 37)
+pnpm test                 # turbo: 366개 테스트 (core 303 · adapters 21 · next 42)
 pnpm lint                 # turbo: ESLint 가드레일 (벤더 격리 · 위험 구문)
 pnpm build                # turbo: 앱 next build (Turbopack)
 pnpm dev                  # turbo: 앱 dev 서버

@@ -1,6 +1,6 @@
 # P3e — 커널 구 스택 완전 제거 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** `error-core` 커널에서 신 decision 모델로 대체된 구 스택(DomainError/active-registry/registry/schema/policy/severity + 구 sink telemetry/notifier/composite/console-reporter)을 **전부 제거**하여, 커널이 통합 decision 모델만 담도록 한다.
 
@@ -90,7 +90,7 @@
 
 순환 import 안전: `codes.ts`→`catalog.ts`(value), `catalog.ts`→`types.ts`(type-only), `types.ts`→`app-error.ts`(type-only), `app-error.ts`→`codes.ts`(value, **호출은 런타임에만** — module-eval 시 catalog 리터럴만 필요). value 사이클 없음.
 
-- [ ] **Step 1: 특성화 테스트 추가** — `decision-vocabulary.test.ts`에 codes SSOT가 정확히 15코드이고 catalog와 1:1임을 고정하는 테스트를 추가(이미 유사 단언이 있으면 강화). 파일 상단 import에 다음이 있는지 확인하고 없으면 추가: `import { KNOWN_ERROR_CODES, isKnownErrorCode } from "@/error/decision/codes";` `import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";`
+- [x] **Step 1: 특성화 테스트 추가** — `decision-vocabulary.test.ts`에 codes SSOT가 정확히 15코드이고 catalog와 1:1임을 고정하는 테스트를 추가(이미 유사 단언이 있으면 강화). 파일 상단 import에 다음이 있는지 확인하고 없으면 추가: `import { KNOWN_ERROR_CODES, isKnownErrorCode } from "@/error/decision/codes";` `import { CANONICAL_ERROR_SEMANTICS } from "@/error/decision/catalog";`
 
 ```ts
 describe("error code SSOT (P3e: catalog-derived)", () => {
@@ -106,12 +106,12 @@ describe("error code SSOT (P3e: catalog-derived)", () => {
 });
 ```
 
-- [ ] **Step 2: 테스트 실행(현 구현에서 통과 확인 — registry/catalog 동치이므로 green)**
+- [x] **Step 2: 테스트 실행(현 구현에서 통과 확인 — registry/catalog 동치이므로 green)**
 
 Run: `pnpm --filter error-core test -- decision-vocabulary`
 Expected: PASS (registry와 catalog 코드 집합이 동일하므로 현재도 green) — 이 테스트가 이제 회귀 가드가 된다.
 
-- [ ] **Step 3: `decision/codes.ts`를 catalog 파생으로 재작성** (전체 내용)
+- [x] **Step 3: `decision/codes.ts`를 catalog 파생으로 재작성** (전체 내용)
 
 ```ts
 // error-core/decision/codes.ts — 알려진 에러 코드 SSOT. 정본 = 통합 카탈로그(CANONICAL_ERROR_SEMANTICS).
@@ -123,12 +123,12 @@ export const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set(Object.keys(CANONI
 export const isKnownErrorCode = (code: string): code is ErrorCode => KNOWN_ERROR_CODES.has(code);
 ```
 
-- [ ] **Step 4: 게이트 실행**
+- [x] **Step 4: 게이트 실행**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS (319 tests + 추가분). `ErrorCode`가 `keyof typeof CANONICAL_ERROR_SEMANTICS`로 동일 15코드 union이므로 타입 변화 없음.
 
-- [ ] **Step 5: 엣지 컷 확인 + 커밋**
+- [x] **Step 5: 엣지 컷 확인 + 커밋**
 
 Run: `grep -n "registry" packages/error-core/src/decision/codes.ts` → Expected: 히트 없음(주석 포함 0).
 
@@ -147,14 +147,14 @@ git commit -m "refactor(error-core): derive ErrorCode SSOT from catalog, drop re
 
 근거: catalog의 `defaultMessageKey`는 registry의 `userMessageKey`와 15코드 전부 값이 동일(`error.validation`/`error.invalidCredentials`/…). 따라서 KEY_TO_CODE 역인덱스는 동일하게 빌드된다. `FALLBACK_MESSAGES`(Korean 컬럼)는 값 불변, 타입만 `ErrorCode`(codes) 기준.
 
-- [ ] **Step 1: 회귀 가드 확인** — `i18n-completeness.test.ts`는 `resolveErrorMessage`(host translator → fallback → generic, RATE_LIMITED `{seconds}` 보간, key-echo 거부)를 검증한다. 현재 green. 이 테스트가 가드다. 추가 작업 없음(단, 이 테스트가 `DEFAULT_ERROR_REGISTRY`를 import해 키를 교차검증한다면 Step 3에서 `CANONICAL_ERROR_SEMANTICS`로 re-point — 파일을 열어 확인할 것).
+- [x] **Step 1: 회귀 가드 확인** — `i18n-completeness.test.ts`는 `resolveErrorMessage`(host translator → fallback → generic, RATE_LIMITED `{seconds}` 보간, key-echo 거부)를 검증한다. 현재 green. 이 테스트가 가드다. 추가 작업 없음(단, 이 테스트가 `DEFAULT_ERROR_REGISTRY`를 import해 키를 교차검증한다면 Step 3에서 `CANONICAL_ERROR_SEMANTICS`로 re-point — 파일을 열어 확인할 것).
 
-- [ ] **Step 2: 기준선 실행**
+- [x] **Step 2: 기준선 실행**
 
 Run: `pnpm --filter error-core test -- i18n-completeness`
 Expected: PASS (기준선).
 
-- [ ] **Step 3: `translator.ts` import + KEY_TO_CODE + FALLBACK_MESSAGES 타입 변경**
+- [x] **Step 3: `translator.ts` import + KEY_TO_CODE + FALLBACK_MESSAGES 타입 변경**
 
 import 교체 (현재 13-14행):
 ```ts
@@ -184,12 +184,12 @@ const KEY_TO_CODE: Readonly<Record<string, ErrorCode>> = Object.freeze(
 
 (주석 8-13행의 "per-locale nested FALLBACK_MESSAGES … registry" 언급은 stale하지 않음 — registry 단어만 빼고 흐름 유지하거나 그대로 둬도 무방. 코드 정확성에는 영향 없음.)
 
-- [ ] **Step 4: 게이트 실행**
+- [x] **Step 4: 게이트 실행**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS. RATE_LIMITED `{seconds}` 보간/ key-echo 거부 테스트 green 유지.
 
-- [ ] **Step 5: 엣지 컷 확인 + 커밋**
+- [x] **Step 5: 엣지 컷 확인 + 커밋**
 
 Run: `grep -n "from \"./registry\"\|DEFAULT_ERROR_REGISTRY" packages/error-core/src/translator.ts` → Expected: 히트 없음.
 
@@ -208,18 +208,18 @@ git commit -m "refactor(error-core): translator KEY_TO_CODE from catalog default
 
 근거/안전: 커널에서 `makeError`의 유일 호출자는 `normalize.ts`이며 **항상 `details: null`**로 호출한다(branch 3b/4의 UNKNOWN_*, mapKnownError의 REQUEST_ABORTED/OFFLINE/NETWORK_ERROR/TIMEOUT). null은 어떤 코드든 valid이므로 live 경로 동작은 불변. 풍부한 details 검증은 make-error.test.ts만 직접 행사한다. 그 테스트는 전부 `VALIDATION`(catalog에 `validateDetails` 보유)으로 invalid 케이스를 만들므로 **동작이 보존**된다.
 
-- [ ] **Step 1: 테스트 의도 확인(코드 변경 없음)** — `make-error.test.ts`를 열어 다음을 확인:
+- [x] **Step 1: 테스트 의도 확인(코드 변경 없음)** — `make-error.test.ts`를 열어 다음을 확인:
   - "valid details pass through"(`VALIDATION` `{fieldErrors:{email:["required"]}}`) → validateDetails(VALIDATION) true → 통과.
   - "accepts z.null() code with null"(`AUTH_REQUIRED` null) → AUTH_REQUIRED엔 validateDetails 없음 → 통과(accept).
   - invalid → UNKNOWN_* (`VALIDATION` `"not-a-valid-shape"`/`123`/`{wrong:true}`/`undefined`/`{whoops:"bad"}`) → validateDetails(VALIDATION) false → fallback. runtime 분기/ correlationId/ cause/ message 동작 보존.
   - "NOT_FOUND `{resource:"user"}`" 성공 경로는 details를 단언하지 않음 → 무영향.
 
-- [ ] **Step 2: 기준선 실행**
+- [x] **Step 2: 기준선 실행**
 
 Run: `pnpm --filter error-core test -- make-error`
 Expected: PASS (9 tests, 기준선).
 
-- [ ] **Step 3: `make-error.ts` 재작성** (전체 내용)
+- [x] **Step 3: `make-error.ts` 재작성** (전체 내용)
 
 ```ts
 // error-core/make-error.ts — produces an AppError (decision model). 상세 검증은 카탈로그의
@@ -267,7 +267,7 @@ export const makeError = (opts: MakeErrorInput): AppError => {
 };
 ```
 
-- [ ] **Step 4: make-error.test.ts 주석 갱신(코드 무변경)** — 파일 상단 주석(1-4행)의 "app-error's getActiveErrorRegistry, which also reads getRuntime" 문구는 stale. 다음으로 교체:
+- [x] **Step 4: make-error.test.ts 주석 갱신(코드 무변경)** — 파일 상단 주석(1-4행)의 "app-error's getActiveErrorRegistry, which also reads getRuntime" 문구는 stale. 다음으로 교체:
 
 ```ts
 // §10 — makeError validation & runtime-driven UNKNOWN_* fallback.
@@ -275,12 +275,12 @@ export const makeError = (opts: MakeErrorInput): AppError => {
 // 이 단일 목을 통해 라우팅된다. (P3e: 상세 검증은 catalog validateDetails로 이동; 구 zod schema 제거.)
 ```
 
-- [ ] **Step 5: 게이트 실행**
+- [x] **Step 5: 게이트 실행**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS. make-error 9 tests green(동작 보존).
 
-- [ ] **Step 6: 엣지 컷 확인 + 커밋**
+- [x] **Step 6: 엣지 컷 확인 + 커밋**
 
 Run: `grep -rn "from \"./schema\"\|ErrorDetailsSchema" packages/error-core/src/make-error.ts` → Expected: 히트 없음.
 
@@ -299,7 +299,7 @@ git commit -m "refactor(error-core): make-error validates via catalog validateDe
 
 근거: 구 `registry-invariants.test.ts`는 `DEFAULT_ERROR_REGISTRY`/`ErrorDetailsSchema`/`isExpectedCode`/구 정책 축(kind/present/severity/log/zod shape)에 결합 — 전부 Task 6에서 삭제. 그 데이터 무결성 의도를 **통합 catalog**(`CANONICAL_ERROR_SEMANTICS`)에 대해 재표현한다. 삭제될 개념(present/log/severity 매트릭스, zod shape, isExpectedCode)은 신 모델 등가물(category, detailsAllowlist, category==='business')로 대체.
 
-- [ ] **Step 1: 새 테스트 파일 작성** `packages/error-core/src/__tests__/catalog-invariants.test.ts` (전체 내용)
+- [x] **Step 1: 새 테스트 파일 작성** `packages/error-core/src/__tests__/catalog-invariants.test.ts` (전체 내용)
 
 ```ts
 // §10 — 통합 catalog 불변식 (P3e: 구 registry-invariants 대체).
@@ -412,18 +412,18 @@ describe("§10 catalog invariants (P3e)", () => {
 });
 ```
 
-- [ ] **Step 2: 구 테스트 삭제**
+- [x] **Step 2: 구 테스트 삭제**
 
 ```bash
 git rm packages/error-core/src/__tests__/registry-invariants.test.ts
 ```
 
-- [ ] **Step 3: 게이트 실행**
+- [x] **Step 3: 게이트 실행**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS. 새 `catalog-invariants` 통과, registry-invariants 제거됨. (registry.ts/schema.ts는 아직 존재 — 다른 소비자(구 app-error 등)가 Task 6 전까지 살려둠.)
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add packages/error-core/src/__tests__/catalog-invariants.test.ts
@@ -444,7 +444,7 @@ git commit -m "test(error-core): replace registry-invariants with catalog-invari
 
 사전 확인: 신 경로는 `decision/types.ts`의 `ReporterSink`/`NotifierSink`만 쓴다. `handle-error.ts`/`handler.ts`/`types.ts`/`decision/system.ts`는 구 `Reporter`/`Presenter`/`Notifier`를 import하지 않는다(검증됨). 구 sink의 유일 커널 소비자는 배럴 + composite.test.ts뿐. `adapters/` 디렉터리는 이 둘만 들어있으므로 비게 된다.
 
-- [ ] **Step 1: 구 sink 파일 + 테스트 삭제**
+- [x] **Step 1: 구 sink 파일 + 테스트 삭제**
 
 ```bash
 git rm packages/error-core/src/telemetry.ts \
@@ -454,7 +454,7 @@ git rm packages/error-core/src/telemetry.ts \
        packages/error-core/src/__tests__/composite.test.ts
 ```
 
-- [ ] **Step 2: 배럴(`index.ts`)에서 구 sink export 제거** — 현재 58-83행 블록을 다음으로 교체(텔레메트리 섹션을 신 모델만 남김):
+- [x] **Step 2: 배럴(`index.ts`)에서 구 sink export 제거** — 현재 58-83행 블록을 다음으로 교체(텔레메트리 섹션을 신 모델만 남김):
 
 ```ts
 // ── 텔레메트리 계약 + 단일 처리 경로 (컴포지션 루트/어댑터용) ───────────────
@@ -471,12 +471,12 @@ export { createHandleError, type HandleErrorOptions } from "./handle-error";
 
 `export type { HandleErrorDeps } from "./types";`와 `export { createHandleError, type HandleErrorOptions } from "./handle-error";`는 **유지**(신 모델).
 
-- [ ] **Step 3: 게이트 실행**
+- [x] **Step 3: 게이트 실행**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS. (severity.ts/policy.ts는 아직 app-error/registry가 import하므로 존재 — Task 6에서 삭제.) `adapters/` 디렉터리가 비었는지 확인: `ls packages/error-core/src/adapters` → Expected: 빈 디렉터리(없으면 `git rm`이 정리). 비었으면 `rmdir packages/error-core/src/adapters` (git은 빈 디렉터리 추적 안 함 — 무시 가능).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add -A packages/error-core/src/index.ts packages/error-core/src/telemetry.ts packages/error-core/src/notifier.ts packages/error-core/src/adapters packages/error-core/src/__tests__/composite.test.ts
@@ -501,7 +501,7 @@ git commit -m "feat(error-core)!: delete legacy sinks (Reporter/Presenter/Notifi
 
 사전 확인: Task 1–5 후 구 코어의 live 커널 importer는 0이어야 한다. 단, **테스트가 구 심볼을 import할 수 있다** — Step 1에서 grep으로 전수 확인 후 마이그레이션/삭제한다.
 
-- [ ] **Step 1: 잔여 구-심볼 importer 전수 확인 (grep 게이트)**
+- [x] **Step 1: 잔여 구-심볼 importer 전수 확인 (grep 게이트)**
 
 Run:
 ```bash
@@ -514,13 +514,13 @@ Expected(이상): 비-삭제 소스 파일에서 히트 0. **만약 테스트(�
 
 각 수정은 그 테스트가 green 유지하도록.
 
-- [ ] **Step 2: `per-request-isolation.test.ts` 삭제** (ALS 격리 테스트 — D2로 active-registry 제거됨)
+- [x] **Step 2: `per-request-isolation.test.ts` 삭제** (ALS 격리 테스트 — D2로 active-registry 제거됨)
 
 ```bash
 git rm packages/error-core/src/__tests__/per-request-isolation.test.ts
 ```
 
-- [ ] **Step 3: 구 코어 6개 파일 삭제**
+- [x] **Step 3: 구 코어 6개 파일 삭제**
 
 ```bash
 git rm packages/error-core/src/app-error.ts \
@@ -531,7 +531,7 @@ git rm packages/error-core/src/app-error.ts \
        packages/error-core/src/severity.ts
 ```
 
-- [ ] **Step 4: 배럴(`index.ts`) 최종 정리** — 현재 9-36행(에러 모델/식별 + 레지스트리/스키마/어휘 블록)을 다음으로 교체:
+- [x] **Step 4: 배럴(`index.ts`) 최종 정리** — 현재 9-36행(에러 모델/식별 + 레지스트리/스키마/어휘 블록)을 다음으로 교체:
 
 ```ts
 // ── 에러 모델 + 식별 ────────────────────────────────────────────────────────
@@ -555,12 +555,12 @@ export { getRuntime, type Runtime } from "./runtime";
 
 `getRuntime/Runtime`(31행, runtime.ts — 구 클러스터 아님, make-error가 사용)은 **유지**.
 
-- [ ] **Step 5: 최종 게이트 + 누출 게이트 불변식 확인**
+- [x] **Step 5: 최종 게이트 + 누출 게이트 불변식 확인**
 
 Run: `pnpm --filter error-core typecheck && pnpm --filter error-core test`
 Expected: PASS. 누출 게이트(`serialize-client.test.ts` 또는 이전된 테스트 — 15코드 검증)·rehydration·network-boundary·route-handler·decision-* 전부 green.
 
-- [ ] **Step 6: 사후 grep 게이트 (커널에 구 스택 잔재 0)**
+- [x] **Step 6: 사후 grep 게이트 (커널에 구 스택 잔재 0)**
 
 Run:
 ```bash
@@ -569,12 +569,12 @@ echo "구 심볼 잔여 참조:"; grep -rn "DomainError\b\|resolvePolicy\|getAct
 ```
 Expected: 삭제 파일 모두 없음. 구 심볼 잔여 0(단 `decision/app-error.ts`의 `isAppError` interop 주석/`name==="DomainError"` 수용 라인은 의도적 — 제외됨).
 
-- [ ] **Step 7: 다운스트림 red 상태 문서화(확인만)**
+- [x] **Step 7: 다운스트림 red 상태 문서화(확인만)**
 
 Run(정보용, 실패 무시): `pnpm --filter error-adapters typecheck 2>&1 | tail -5; pnpm --filter error-next typecheck 2>&1 | tail -5`
 Expected: error-adapters/error-next red(삭제 심볼 미존재). **이는 정상** — P6/P5에서 신 표면 채택으로 해소. error-core만 게이트.
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add -A packages/error-core/src

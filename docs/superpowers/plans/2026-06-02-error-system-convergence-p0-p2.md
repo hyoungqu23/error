@@ -1,6 +1,6 @@
 # Error System 수렴 — P0–P2 (기반) 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 신 `error-decision-system`의 결정 엔진·결정 어휘·카탈로그 검증을 `error-core` 안으로 **비파괴적으로(additive)** 이식하고, 기존 15-코드 레지스트리에서 파생한 `ErrorSemantics` 카탈로그로 엔진이 실제로 도는 것을 테스트로 고정한다. 기존 구 스택 코드·테스트는 한 줄도 건드리지 않는다.
 
@@ -36,17 +36,17 @@
 
 **Files:** 없음(검증만)
 
-- [ ] **Step 1: 워크스페이스 의존성 설치 확인**
+- [x] **Step 1: 워크스페이스 의존성 설치 확인**
 
 Run: `cd /Users/hm2/Private/error-system && pnpm install --frozen-lockfile`
 Expected: 설치 성공, 에러 없음.
 
-- [ ] **Step 2: 전체 테스트 실행해 baseline 기록**
+- [x] **Step 2: 전체 테스트 실행해 baseline 기록**
 
 Run: `pnpm test 2>&1 | tee /tmp/eds-baseline.txt`
 Expected: 모든 패키지 테스트 PASS. 출력 마지막의 패키지별 통과 수(error-core / error-next / error-adapters / error-decision-system)를 `/tmp/eds-baseline.txt`에 남긴다. 이후 모든 Task는 이 baseline이 깨지지 않아야 한다.
 
-- [ ] **Step 3: 타입체크 baseline**
+- [x] **Step 3: 타입체크 baseline**
 
 Run: `pnpm typecheck`
 Expected: 모든 패키지 PASS.
@@ -55,17 +55,17 @@ Expected: 모든 패키지 PASS.
 
 **Files:** 없음(git 작업)
 
-- [ ] **Step 1: cherry-equivalent(작업트리 동일) 확인**
+- [x] **Step 1: cherry-equivalent(작업트리 동일) 확인**
 
 Run: `git fetch origin && git diff --stat origin/eds-production-hardening origin/main`
 Expected: **출력이 비어 있음**(작업트리 바이트 동일 = 고유 콘텐츠 없음). 출력이 비어있지 않으면 **삭제하지 말고 중단**하고 차이를 사람에게 보고한다.
 
-- [ ] **Step 2: 비어 있음을 확인한 경우에만 원격 브랜치 삭제**
+- [x] **Step 2: 비어 있음을 확인한 경우에만 원격 브랜치 삭제**
 
 Run: `git push origin --delete eds-production-hardening`
 Expected: `- [deleted] eds-production-hardening`. (외부 상태 변경이므로 Step 1이 비었을 때만 수행.)
 
-- [ ] **Step 3: 커밋 불필요(브랜치 메타만 변경).** 다음 Task로 진행.
+- [x] **Step 3: 커밋 불필요(브랜치 메타만 변경).** 다음 Task로 진행.
 
 ---
 
@@ -76,7 +76,7 @@ Expected: `- [deleted] eds-production-hardening`. (외부 상태 변경이므로
 **Files:**
 - Create: `packages/error-core/src/decision/types.ts`
 
-- [ ] **Step 1: 어휘 타입 파일 작성**
+- [x] **Step 1: 어휘 타입 파일 작성**
 
 `packages/error-decision-system/src/index.ts:1-133`의 타입 정의를 이식한다. 단 `ReporterSink`/`NotifierSink`/`TelemetryContext`는 `DomainError`를 참조하므로 **이 파일에 넣지 않는다**(P2에서 구조적 타입과 함께 추가). 아래 내용을 그대로 작성:
 
@@ -217,12 +217,12 @@ export type ErrorCatalog = Record<string, ErrorSemantics>;
 export type OperationCatalog = Record<string, OperationMeta>;
 ```
 
-- [ ] **Step 2: 타입체크로 컴파일 검증**
+- [x] **Step 2: 타입체크로 컴파일 검증**
 
 Run: `cd packages/error-core && pnpm typecheck`
 Expected: PASS (신규 파일이 아직 어디서도 import되지 않아도 tsc --noEmit는 전체를 본다).
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/types.ts
@@ -235,7 +235,7 @@ git commit -m "feat(error-core): add decision vocabulary types (P1, additive)"
 - Create: `packages/error-core/src/decision/index.ts`
 - Modify: `packages/error-core/src/index.ts`
 
-- [ ] **Step 1: decision 배럴 생성**
+- [x] **Step 1: decision 배럴 생성**
 
 `packages/error-core/src/decision/index.ts`:
 
@@ -244,7 +244,7 @@ git commit -m "feat(error-core): add decision vocabulary types (P1, additive)"
 export * from "./types";
 ```
 
-- [ ] **Step 2: error-core 최상위 배럴에 decision 추가**
+- [x] **Step 2: error-core 최상위 배럴에 decision 추가**
 
 `packages/error-core/src/index.ts`를 열어 **기존 export를 그대로 둔 채** 파일 끝에 다음 줄을 추가:
 
@@ -252,17 +252,17 @@ export * from "./types";
 export * from "./decision";
 ```
 
-- [ ] **Step 3: 타입체크**
+- [x] **Step 3: 타입체크**
 
 Run: `cd packages/error-core && pnpm typecheck`
 Expected: PASS. 기존 export와 이름 충돌이 없어야 한다(`ErrorCategory` 등은 error-core에 기존에 없던 이름).
 
-- [ ] **Step 4: 기존 테스트 회귀 없음 확인**
+- [x] **Step 4: 기존 테스트 회귀 없음 확인**
 
 Run: `cd packages/error-core && pnpm test`
 Expected: baseline과 동일하게 전부 PASS.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/index.ts packages/error-core/src/index.ts
@@ -281,7 +281,7 @@ git commit -m "feat(error-core): re-export decision vocabulary from barrel (P1)"
 
 기존 `DEFAULT_ERROR_REGISTRY`(`registry.ts:18-37`)의 15개 코드를 `ErrorSemantics`로 파생한다. 매핑: `kind→category`(동일 값), `httpStatus→defaultHttpStatus`, `retryable→defaultRetryable`, `userMessageKey→defaultMessageKey`. **신규 authored 필드:** `sensitivity`(보안 disclosure 축) + 비-public 코드의 per-disclosure `messageKeys`. `present`/`log`/`severity`는 엔진이 도출하므로 옮기지 않는다.
 
-- [ ] **Step 1: 실패하는 카탈로그 완전성 테스트 작성**
+- [x] **Step 1: 실패하는 카탈로그 완전성 테스트 작성**
 
 `packages/error-core/src/__tests__/decision-vocabulary.test.ts`:
 
@@ -309,12 +309,12 @@ describe("CANONICAL_ERROR_SEMANTICS", () => {
 });
 ```
 
-- [ ] **Step 2: 테스트 실패 확인**
+- [x] **Step 2: 테스트 실패 확인**
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-vocabulary.test.ts`
 Expected: FAIL — `Cannot find module '../decision/catalog'`.
 
-- [ ] **Step 3: 카탈로그 작성**
+- [x] **Step 3: 카탈로그 작성**
 
 `packages/error-core/src/decision/catalog.ts`. `messageKeys`는 비-public 코드가 도달하는 disclosure 레벨(safe-vague/generic/support-only)을 모두 덮도록 작성(과잉 커버는 무해, validateCatalog 통과 보장):
 
@@ -428,12 +428,12 @@ export const CANONICAL_ERROR_SEMANTICS = {
 } as const satisfies ErrorCatalog;
 ```
 
-- [ ] **Step 4: 테스트 통과 확인**
+- [x] **Step 4: 테스트 통과 확인**
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-vocabulary.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/catalog.ts packages/error-core/src/__tests__/decision-vocabulary.test.ts
@@ -446,7 +446,7 @@ git commit -m "feat(error-core): derive canonical ErrorSemantics catalog from re
 - Create: `packages/error-core/src/decision/validate.ts`
 - Test: `packages/error-core/src/__tests__/decision-validate.test.ts`
 
-- [ ] **Step 1: 실패하는 불변식 테스트 작성**
+- [x] **Step 1: 실패하는 불변식 테스트 작성**
 
 `packages/error-core/src/__tests__/decision-validate.test.ts`:
 
@@ -480,12 +480,12 @@ describe("validateCatalog", () => {
 });
 ```
 
-- [ ] **Step 2: 테스트 실패 확인**
+- [x] **Step 2: 테스트 실패 확인**
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-validate.test.ts`
 Expected: FAIL — `Cannot find module '../decision/validate'`.
 
-- [ ] **Step 3: validate.ts 작성**
+- [x] **Step 3: validate.ts 작성**
 
 `packages/error-decision-system/src/index.ts`의 `baselineDisclosureLevels`(403 직전), `reachableDisclosureLevels`(403-413), `validateCatalog`(418-435) 세 함수를 이식한다. 아래는 그 세 함수의 합본(원본과 동일 로직, 메시지 prefix만 `[error-core/decision]`으로 변경, 타입은 decision/types에서 import):
 
@@ -548,12 +548,12 @@ export const validateCatalog = (errors: ErrorCatalog, fallbackErrorCode: string)
 
 > **주의:** 위 `baselineDisclosureLevels`는 EDS 원본과 동작이 일치해야 한다. EDS 원본(`index.ts`의 `baselineDisclosureLevels`)을 열어 본문이 위와 다르면 **원본을 정본으로** 맞춘다(이 파일의 로직이 `resolveDisclosure`의 fallback 분기와 일치하는지 교차 확인).
 
-- [ ] **Step 4: 테스트 통과 확인**
+- [x] **Step 4: 테스트 통과 확인**
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-validate.test.ts`
 Expected: PASS (3 tests). 만약 1번 테스트가 "missing messageKeys" 로 실패하면, 그 코드의 누락된 disclosure 레벨 messageKey를 `catalog.ts`에 추가하고 다시 실행(TDD 반복).
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/validate.ts packages/error-core/src/__tests__/decision-validate.test.ts
@@ -567,7 +567,7 @@ git commit -m "feat(error-core): port validateCatalog disclosure invariant (P2)"
 
 이 단계의 resolver는 통합 `AppError`(P3 산출)에 결합하지 않고 구조적 타입 `DecisionError`에만 의존한다.
 
-- [ ] **Step 1: resolve.ts 작성 — 구조적 타입 + 이식 함수**
+- [x] **Step 1: resolve.ts 작성 — 구조적 타입 + 이식 함수**
 
 `error-decision-system/src/index.ts`의 모듈 레벨 순수 함수들을 이식한다: `pickAllowlistedDetails`(437-445), `resolveDisclosure`(447-474), `resolveSurface`(476-503), `guardIdempotency`(508-509), `resolveAction`(511-526), `resolveMessageKey`(528-529), `resolveTarget`(533-542), `resolveTelemetry`(543-664). **변경점은 두 가지뿐:** (a) 이 함수들이 참조하는 `DomainError`를 아래 구조적 `DecisionError`로 교체, (b) 타입 import를 `./types`로.
 
@@ -626,12 +626,12 @@ export const resolveErrorDecision = (input: ErrorDecisionInput): ErrorDecision =
 > **주의 1:** `resolveTarget`(EDS 533-542)와 `resolveTelemetry`(EDS 543-664)의 **정확한 시그니처를 원본에서 확인**하고 위 호출부를 맞춘다. 원본 `resolveErrorDecision`(EDS 665+) 본문이 위 합성과 다르면(특히 supportCode/target 결정 순서) **원본을 정본으로** 맞춘다.
 > **주의 2:** `resolveTelemetry`가 `Math.random` 기반 샘플링을 직접 하지 않고 `sampleRate`만 *결정*하는지 확인한다(실행은 P3의 executor). 결정만 한다면 그대로 이식.
 
-- [ ] **Step 2: 타입체크**
+- [x] **Step 2: 타입체크**
 
 Run: `cd packages/error-core && pnpm typecheck`
 Expected: PASS. 컴파일 에러가 나면 이식한 함수의 `DomainError` 잔존 참조를 `DecisionError`로 모두 교체했는지 확인.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/resolve.ts
@@ -643,7 +643,7 @@ git commit -m "feat(error-core): port pure decision resolver functions (P2)"
 **Files:**
 - Modify: `packages/error-core/src/decision/index.ts`
 
-- [ ] **Step 1: 배럴 확장**
+- [x] **Step 1: 배럴 확장**
 
 `packages/error-core/src/decision/index.ts`를 다음으로 교체:
 
@@ -655,12 +655,12 @@ export * from "./validate";
 export { CANONICAL_ERROR_SEMANTICS } from "./catalog";
 ```
 
-- [ ] **Step 2: 타입체크 + 기존 테스트 회귀 없음**
+- [x] **Step 2: 타입체크 + 기존 테스트 회귀 없음**
 
 Run: `cd packages/error-core && pnpm typecheck && pnpm test`
 Expected: 모두 PASS, baseline 유지.
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/index.ts
@@ -672,9 +672,9 @@ git commit -m "feat(error-core): expose resolver + validate from decision barrel
 **Files:**
 - Test: `packages/error-core/src/__tests__/decision-resolve.test.ts`
 
-`ERROR_DECISION_SYSTEM.md`의 대표 시나리오를 정준 카탈로그에 대해 고정한다. 엔진이 error-core 안에서 실제로 문서화된 결정을 내는지 증명한다.
+`docs/history/ERROR_DECISION_SYSTEM.md`의 대표 시나리오를 정준 카탈로그에 대해 고정한다. 엔진이 error-core 안에서 실제로 문서화된 결정을 내는지 증명한다.
 
-- [ ] **Step 1: 시나리오 테스트 작성**
+- [x] **Step 1: 시나리오 테스트 작성**
 
 `packages/error-core/src/__tests__/decision-resolve.test.ts`:
 
@@ -756,14 +756,14 @@ describe("resolveErrorDecision — scenario matrix (canonical catalog)", () => {
 });
 ```
 
-- [ ] **Step 2: 테스트 실행**
+- [x] **Step 2: 테스트 실행**
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-resolve.test.ts`
 Expected: PASS (7 tests).
 
 > 일부 단언이 실패하면, **엔진 동작이 정본**이다(이식한 resolver는 EDS와 동일하므로). 기대값을 EDS의 동일 시나리오(`error-decision-system/src/__tests__/decision.test.ts`)와 대조해 맞춘다. 카탈로그의 `sensitivity`/`messageKeys`/`defaultAction`이 원인이면 `catalog.ts`를 EDS `demo.ts`의 대응 코드 설정과 맞춘다. (예: SCHEMA_MISMATCH가 support-only가 되려면 fault+core 조합이 필요 — 이미 충족.)
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add packages/error-core/src/__tests__/decision-resolve.test.ts
@@ -774,17 +774,17 @@ git commit -m "test(error-core): lock decision scenario matrix on canonical cata
 
 **Files:** 없음(검증)
 
-- [ ] **Step 1: error-core 전체 테스트**
+- [x] **Step 1: error-core 전체 테스트**
 
 Run: `cd packages/error-core && pnpm test`
 Expected: 기존 테스트 + 신규 decision 테스트(vocabulary 2 + validate 3 + resolve 7 = 12) 전부 PASS.
 
-- [ ] **Step 2: 워크스페이스 전체 회귀**
+- [x] **Step 2: 워크스페이스 전체 회귀**
 
 Run: `cd /Users/hm2/Private/error-system && pnpm typecheck && pnpm test`
 Expected: 모든 패키지 PASS. 구 스택(error-next/error-adapters)·신 시스템(error-decision-system)은 baseline(`/tmp/eds-baseline.txt`)과 동일, error-core는 +12 테스트.
 
-- [ ] **Step 3: P2 완료 커밋(메타)**
+- [x] **Step 3: P2 완료 커밋(메타)**
 
 ```bash
 git commit --allow-empty -m "chore(error-core): P2 complete — decision engine grafted into error-core, canonical catalog validated, old stack untouched"
