@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .turbo .next node_modules"
+    "clean": "rm -rf .turbo .next node_modules",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@sentry/nextjs": "^8.50.0",

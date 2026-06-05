@@ -5,23 +5,12 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // P8 편입 예정(이연 지점):
-    //  - apps/**            — 도그푸딩 마이그레이션과 함께 lint 활성화. 그때 컴포지션 루트
-    //                         (composition-root.ts / instrumentation* / Toaster 마운트 지점)에
-    //                         벤더 import 허용 오버라이드를 추가한다.
-    //  - error-decision-system — P8에서 패키지 은퇴.
-    ignores: [
-      "**/node_modules/**",
-      "**/.next/**",
-      "**/dist/**",
-      "**/.turbo/**",
-      "apps/**",
-      "packages/error-decision-system/**",
-    ],
+    // P8: 워크스페이스 전체 편입 완료(apps 포함, error-decision-system 은퇴). 생성물만 제외.
+    ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/.turbo/**"],
   },
   {
-    // 가드 스코프는 packages/*/src/** — "출하 코드는 전부 src/ 아래"가 이 워크스페이스의 불변이다.
-    files: ["packages/*/src/**/*.{ts,tsx}"],
+    // 가드 스코프: 패키지는 src/**("출하 코드는 전부 src/ 아래" 불변), 앱은 전체(P8 편입).
+    files: ["packages/*/src/**/*.{ts,tsx}", "apps/error-architecture/**/*.{ts,tsx}"],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { ecmaFeatures: { jsx: true } },
@@ -81,11 +70,14 @@ export default tseslint.config(
     },
   },
   {
-    // 벤더 어댑터 본체 + 테스트(SDK mock/fixture)는 벤더 룰 제외 — 격리 원칙의 '안쪽'이다.
+    // 벤더 룰 제외(격리 원칙의 '안쪽'): 어댑터 본체, 테스트(SDK mock/fixture), 그리고 앱의
+    // 컴포지션 지점 — Toaster 마운트(providers.tsx)와 Sentry.init 지점(instrumentation*).
     files: [
       "packages/error-adapters/src/**/*.{ts,tsx}",
       "packages/*/src/**/__tests__/**/*.{ts,tsx}",
       "packages/*/src/**/*.test.{ts,tsx}",
+      "apps/error-architecture/app/providers.tsx",
+      "apps/error-architecture/instrumentation*.{ts,tsx}",
     ],
     rules: {
       "no-restricted-imports": "off",
