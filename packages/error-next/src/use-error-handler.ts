@@ -1,11 +1,11 @@
 // ============================================================================
 // error/use-error-handler.ts  — §8.2  ('use client')
 // Interaction-layer entry point: runs the single processing path (handleError),
-// then performs the navigation/escalation UX the Presenter cannot.
-//   - "redirect" → router.push("/login?returnTo=<current path+search>") (G9 seam)
-//   - "page"     → navigate to a dedicated route if mapped (FORBIDDEN → /403),
-//                  else RE-THROW the normalized DomainError so the nearest
-//                  error.tsx renders the full-page state.
+// then performs the navigation/escalation UX off the resolved decision.
+//   - surface "redirect" (or action "login") → router.push(target+returnTo) (G9 seam)
+//   - surface "page"     → navigate to a dedicated route if mapped (FORBIDDEN → /403),
+//                          else RE-THROW the normalized AppError so the nearest
+//                          error.tsx renders the full-page state.
 // ============================================================================
 "use client";
 import { useCallback } from "react";
@@ -15,7 +15,7 @@ import type { HandleErrorOptions } from "error-core/handle-error";
 import type { DecisionFailure, ErrorCode } from "error-core";
 
 /**
- * Optional dedicated-route map for the "page" PresentAction. A code present here
+ * Optional dedicated-route map for the "page" ErrorSurface. A code present here
  * NAVIGATES to its route instead of re-throwing into the nearest error.tsx.
  * Inlined (no separate page-routes module) so this file references nothing it
  * does not define or import from a mapped path.

@@ -103,4 +103,33 @@ describe("§8-5 PII invariants (P7)", () => {
       expect(TOKEN_RE.test(wire)).toBe(false);
     }
   });
+
+  it("an AppError whose code is OUTSIDE the catalog never reaches the wire — degraded to fallback (P2)", () => {
+    const sys = createDecisionSystem({
+      errors: CANONICAL_ERROR_SEMANTICS,
+      operations: {
+        checkout: {
+          operation: "checkout",
+          owner: "team-errors",
+          criticality: "core",
+          defaultUiScope: "form",
+          piiRisk: true,
+        },
+      },
+      fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+    });
+
+    const failure = sys.finalizeUnknown(
+      appError("INTERNAL_LEGACY_CODE", { secret: PII_TOKEN }),
+      OCC,
+      { runtime: "server", correlationId: "c1" },
+    );
+
+    // 내부/구버전 코드 문자열도, 그 details도 wire에 노출되지 않는다.
+    expect(failure.error.code).toBe("UNKNOWN_SERVER_ERROR");
+    expect(failure.payload.code).toBe("UNKNOWN_SERVER_ERROR");
+    const wire = JSON.stringify(failure.payload);
+    expect(wire).not.toContain("INTERNAL_LEGACY_CODE");
+    expect(TOKEN_RE.test(wire)).toBe(false);
+  });
 });

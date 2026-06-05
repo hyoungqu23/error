@@ -201,14 +201,28 @@ export const resolveErrorDecision = (input: ErrorDecisionInput): ErrorDecision =
       : undefined;
   const telemetry = resolveTelemetry(error, semantics, occurrence, input.runtime, surface);
 
+  // §5.4 + P2(리뷰): retryAfterMs(인스턴스 우선, details 폴백 — D5)에서 {seconds} 보간 인자를
+  // 여기 한 곳에서 도출한다. 그래야 모든 소비자(wire payload·ErrorFallback·Presenter)가 같은
+  // 카운트다운을 받는다 — 이전엔 sonner presenter만 재구현해 다른 표면은 리터럴 {seconds}를 렌더했다.
+  const validMs = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+  const detailsHint = (error.details as { retryAfterMs?: unknown } | null | undefined)?.retryAfterMs;
+  const retryAfterMs = validMs(error.retryAfterMs)
+    ? error.retryAfterMs
+    : validMs(detailsHint)
+      ? detailsHint
+      : undefined;
+
   const user: UserErrorDecision = {
     surface,
     disclosure,
     messageKey: resolveMessageKey(semantics, disclosure),
+    ...(retryAfterMs !== undefined
+      ? { messageVars: { seconds: Math.ceil(retryAfterMs / 1000) } }
+      : {}),
     action,
     target: resolveTarget(semantics, occurrence, surface),
     supportCode,
-    retryAfterMs: error.retryAfterMs,
+    retryAfterMs,
   };
 
   return { user, telemetry };

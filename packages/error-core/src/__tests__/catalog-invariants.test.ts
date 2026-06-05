@@ -117,8 +117,9 @@ describe("§10 catalog invariants (P3e)", () => {
     expect(s.defaultRetryable).toBe(true);
     expect(s.detailsExposure).toBe("allowlist");
     expect(s.detailsAllowlist).toContain("retryAfterMs");
-    // validateDetails는 retryAfterMs:number를 요구한다(D1).
+    // validateDetails는 retryAfterMs:number 또는 null(힌트 없는 429 — P2)을 허용한다(D1).
     expect(s.validateDetails?.({ retryAfterMs: 1000 })).toBe(true);
+    expect(s.validateDetails?.(null)).toBe(true);
     expect(s.validateDetails?.({ retryAfterMs: "soon" })).toBe(false);
   });
 
@@ -129,6 +130,9 @@ describe("§10 catalog invariants (P3e)", () => {
     expect(s.validateDetails?.({ fieldErrors: { email: ["required"] } })).toBe(true);
     expect(s.validateDetails?.("nope")).toBe(false);
     expect(s.validateDetails?.(null)).toBe(false);
+    // P2: 값까지 string[] 강제 — 위조 중첩 객체가 allowlist를 타고 누출게이트를 못 넘는다.
+    expect(s.validateDetails?.({ fieldErrors: { password: [{ rawPassword: "secret" }] } })).toBe(false);
+    expect(s.validateDetails?.({ fieldErrors: { email: "required" } })).toBe(false);
   });
 
   it("validateCatalog passes for the canonical catalog (disclosure/messageKey invariant holds)", () => {

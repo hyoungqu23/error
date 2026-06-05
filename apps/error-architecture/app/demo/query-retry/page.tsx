@@ -114,7 +114,7 @@ export default function QueryRetryDemo() {
                 )
               }
             >
-              이 에러를 핸들러로 보내기 (telemetry → decision.user → 토스트)
+              이 에러를 핸들러로 보내기 (telemetry → decision.user → surface별 토스트/인라인)
             </button>
             <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
               NOT_FOUND(business)·HTTP_SERVER_ERROR(fault)는 surface:&quot;inline&quot; → 토스트가

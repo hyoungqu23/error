@@ -112,7 +112,8 @@ const defaultSemantics = (code: string): ErrorSemantics => ({
 
 // SEC-4 / D7: shallow pick. Does NOT recurse, so nested `fieldErrors` (Record<string,string[]>)
 // survives intact while sibling non-allowlisted keys are dropped.
-const pickAllowlistedDetails = (details: unknown, allowlist: readonly string[] | undefined): unknown => {
+// export: sentry-reporter의 details 게이트가 동일 구현을 공유한다(클라 DTO와 같은 allowlist 보장).
+export const pickAllowlistedDetails = (details: unknown, allowlist: readonly string[] | undefined): unknown => {
   if (!allowlist?.length || typeof details !== "object" || details === null) return undefined;
   const source = details as Record<string, unknown>;
   const picked: Record<string, unknown> = {};
@@ -288,11 +289,16 @@ export const createDecisionSystem = <
     // D1: per-code details validity gated here at finalize time via `semantics.validateDetails`
     // (NOT zod). Invalid details degrade to the safe fallback fault so a bad payload never reaches
     // the client allowlist or the resolved decision.
+    // P2(리뷰): 카탈로그 밖 code도 동일하게 강등한다 — lookupSemantics는 정책만 fallback으로
+    // 풀고 error는 원본을 유지했어서, 내부/구버전 code 문자열이 payload.code로 wire에 노출되고
+    // 클라 isClientErrorPayload(known-code 가드) 재수화가 실패했다.
+    const codeKnown = Object.prototype.hasOwnProperty.call(errors, error.code);
     const detailsAreValid = semantics.validateDetails ? semantics.validateDetails(error.details) : true;
-    const safeError = detailsAreValid
+    const isSafe = codeKnown && detailsAreValid;
+    const safeError = isSafe
       ? error
       : (appError(options.fallbackErrorCode, null, { cause: error, correlationId: error.correlationId, digest: error.digest }) as unknown as AppError<C>);
-    const safeSemantics = detailsAreValid ? semantics : lookupSemantics(safeError.code);
+    const safeSemantics = isSafe ? semantics : lookupSemantics(safeError.code);
     const decision = resolveErrorDecision({
       error: safeError,
       semantics: safeSemantics,

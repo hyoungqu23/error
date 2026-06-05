@@ -77,9 +77,22 @@ describe("resolveErrorDecision — scenario matrix (canonical catalog)", () => {
     expect(d.user.surface).toBe("silent");
   });
 
-  it("RATE_LIMITED retains retryAfterMs on the decision for render-time {seconds} (D5)", () => {
+  it("RATE_LIMITED derives {seconds} messageVars centrally + retains retryAfterMs (D5/§5.4, P2)", () => {
     const d = decide("RATE_LIMITED", occ({ interaction: "form-submit", uiScope: "form" }), { retryAfterMs: 5000 });
     expect(d.user.retryAfterMs).toBe(5000);
-    expect(d.user.messageVars).toBeUndefined(); // 카운트다운은 render-time 도출
+    // P2: resolve가 한 곳에서 도출 — 모든 표면(payload/ErrorFallback/Presenter)이 같은 카운트다운을 받는다.
+    expect(d.user.messageVars).toEqual({ seconds: 5 });
+  });
+
+  it("RATE_LIMITED with a details-only hint still derives messageVars (instance-first, details fallback)", () => {
+    const input: ErrorDecisionInput = {
+      error: { code: "RATE_LIMITED", details: { retryAfterMs: 2500 } },
+      semantics: CANONICAL_ERROR_SEMANTICS.RATE_LIMITED,
+      occurrence: occ({ interaction: "form-submit", uiScope: "form" }),
+      runtime,
+    };
+    const d = resolveErrorDecision(input);
+    expect(d.user.retryAfterMs).toBe(2500);
+    expect(d.user.messageVars).toEqual({ seconds: 3 });
   });
 });

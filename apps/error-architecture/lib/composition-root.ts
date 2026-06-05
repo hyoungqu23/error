@@ -18,32 +18,19 @@
 //                       sentryBeforeSend })를 호출하고 createSentryReporter()를 guarded
 //                       composite의 sink로 추가해 자체 deps로 교체한다. (이 데모는 기본 사용)
 import {
-  errorSystem,
+  clientErrorSystem,
   guardedCompositeReporter,
+  createConsoleReporter,
   type HandleErrorDeps,
-  type ReporterSink,
   type DecisionFailure,
 } from "error-next";
 import { createSonnerPresenter } from "error-adapters/sonner-presenter";
 
-/** 콘솔 모니터링 sink(SDK 없음) — code/level/correlationId 구조화 라인. */
-const consoleReporter: ReporterSink = {
-  capture(error, decision, ctx) {
-    console.error({
-      tag: "[error]",
-      code: error.code,
-      level: decision.level,
-      correlationId: ctx.correlationId,
-      route: ctx.route,
-    });
-  },
-  breadcrumb() {},
-};
-
 /** 클라이언트 런타임의 deps 묶음. ErrorInit이 initHandleError(buildClientDeps(), { correlationId })로 1회 바인딩한다. */
 export const buildClientDeps = (): HandleErrorDeps => ({
-  system: errorSystem,
-  reporter: guardedCompositeReporter([{ label: "console", reporter: consoleReporter }]),
+  // 클라 fallback은 UNKNOWN_CLIENT_ERROR(clientErrorSystem) — 브라우저 unknown을 서버 fault로 안 보냄.
+  system: clientErrorSystem,
+  reporter: guardedCompositeReporter([{ label: "console", reporter: createConsoleReporter() }]),
   notifier: { alert() {} }, // 페이징은 서버 런타임의 책임 — 클라에서는 no-op.
 });
 

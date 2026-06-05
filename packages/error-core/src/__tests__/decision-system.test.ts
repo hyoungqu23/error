@@ -313,8 +313,9 @@ describe("createDecisionSystem (P3a)", () => {
     const details = finalized.payload.details as { retryAfterMs?: number } | undefined;
     expect(details?.retryAfterMs).toBe(5000);
     expect(finalized.payload.retryAfterMs).toBe(5000);
-    // render-time countdown: messageVars stays unset on the decision (D5).
-    expect(finalized.decision.user.messageVars).toBeUndefined();
+    // P2(리뷰): {seconds}는 resolve가 중앙 도출 — payload·ErrorFallback·Presenter가 같은 카운트다운을 받는다.
+    expect(finalized.decision.user.messageVars).toEqual({ seconds: 5 });
+    expect(finalized.payload.messageVars).toEqual({ seconds: 5 });
   });
 
   it("finalizeUnknown wraps a non-AppError into the fallback code", () => {

@@ -20,7 +20,12 @@ import { useContext, useEffect, useRef, useTransition } from "react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { resolveErrorMessage } from "error-core/translator";
 import { handleError } from "error-core/handler";
-import { isAppError, isKnownErrorCode, CANONICAL_ERROR_SEMANTICS } from "error-core";
+import {
+  isAppError,
+  isKnownErrorCode,
+  retryAfterHintFromError,
+  CANONICAL_ERROR_SEMANTICS,
+} from "error-core";
 
 type RetryProp = { unstable_retry?: () => void; reset?: () => void };
 
@@ -85,9 +90,16 @@ export function ErrorFallback({
   // provider-free `resolveErrorMessage` never returns the raw key and never throws,
   // so both the normal (`error.tsx`) and `minimal` (`global-error.tsx`) paths render
   // real copy without any React context translator.
+  // {seconds} 보간(P2 리뷰): RATE_LIMITED가 이 경계에 도달해도 리터럴 토큰이 아니라
+  // 카운트다운이 렌더되도록 retryAfterMs 힌트에서 vars를 도출한다(resolve §5.4와 동일 규칙).
+  const retryHint = isAppError(error) ? retryAfterHintFromError(error) : undefined;
   const title =
     isAppError(error) && isKnownErrorCode(error.code)
-      ? resolveErrorMessage(CANONICAL_ERROR_SEMANTICS[error.code].defaultMessageKey)
+      ? resolveErrorMessage(
+          CANONICAL_ERROR_SEMANTICS[error.code].defaultMessageKey,
+          null,
+          retryHint !== undefined ? { seconds: Math.ceil(retryHint / 1000) } : undefined,
+        )
       : resolveErrorMessage("error.unknown");
 
   // (d) only offer a retry when a retry is meaningful. A known AppError uses its catalog

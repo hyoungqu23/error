@@ -19,6 +19,7 @@ import {
   createHandleError,
   createErrorResponder,
   guardedCompositeReporter,
+  createConsoleReporter,
   type GuardedCompositeReporter,
   type HandleErrorOptions,
   type HandleErrorDeps,
@@ -42,20 +43,6 @@ const buildServerNotifier = (): NotifierSink => {
   return url ? createPagerNotifier(webhookPagerTransport(url)) : { alert() {} };
 };
 
-/** Console monitoring sink (no SDK): a structured stderr line keyed by code/level/correlationId. */
-const consoleReporter: ReporterSink = {
-  capture(error, decision, ctx) {
-    console.error({
-      tag: "[error]",
-      code: error.code,
-      level: decision.level,
-      correlationId: ctx.correlationId,
-      route: ctx.route,
-    });
-  },
-  breadcrumb() {},
-};
-
 /**
  * The guarded composite reporter (P6 — dead-man's-switch restored on ReporterSink), kept as its
  * own typed handle so the health route (apps, P8) can read health() without widening
@@ -63,7 +50,7 @@ const consoleReporter: ReporterSink = {
  * health().failures crossing a threshold is what the /health GET turns into a 503.
  */
 export const serverReporter: GuardedCompositeReporter = guardedCompositeReporter([
-  { label: "console", reporter: consoleReporter },
+  { label: "console", reporter: createConsoleReporter() },
 ]);
 
 /**
