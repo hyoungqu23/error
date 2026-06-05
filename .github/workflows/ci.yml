@@ -18,4 +18,4 @@ jobs:
           node-version: 22 # pnpm 11은 Node ≥ 22.13 요구(node:sqlite)
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run typecheck test lint
+      - run: pnpm turbo run typecheck test lint build # build: next build만 잡는 회귀(RSC 경계·빌드타임 제약)도 게이트

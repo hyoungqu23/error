@@ -27,7 +27,7 @@
 **한 커밋.** 아래 순서로 작업하되 green 체크는 마지막. 각 파일 변경:
 
 ### (a) decision/app-error.ts — D2 guards 추가
-- [ ] 신 guards 추가(구 guards 미수정):
+- [x] 신 guards 추가(구 guards 미수정):
 
 ```typescript
 // decision/app-error.ts 에 추가
@@ -50,7 +50,7 @@ export const isClientErrorPayload = (e: unknown): e is ClientErrorPayload =>
 (주의: import cycle — `decision/app-error.ts` → `./types`(ClientErrorPayload) → `./app-error`(AppError) 는 type-only라 OK. `./codes`는 값 import.)
 
 ### (b) make-error.ts — AppError 생산
-- [ ] 재작성:
+- [x] 재작성:
 
 ```typescript
 // error/make-error.ts — AppError 생산. 검증은 zod ErrorDetailsSchema 과도기 유지(P3e에서 D1 validateDetails로 일원화).
@@ -91,7 +91,7 @@ export const makeError = (opts: MakeErrorInput): AppError => {
 (구 `AppErrorOptions<C>`/`construct` 의존 제거. `severity`/`retryable` 옵션 삭제. `ErrorCode`는 `decision/codes`에서.)
 
 ### (c) normalize.ts — normalizeToAppError
-- [ ] 재작성 — **4분기 순서·correlationId 우선 verbatim**, `DomainError`→`AppError`, 신 guards:
+- [x] 재작성 — **4분기 순서·correlationId 우선 verbatim**, `DomainError`→`AppError`, 신 guards:
 
 ```typescript
 // error/normalize.ts — 임의 캐치값 → AppError. 분기 순서 load-bearing(verbatim 보존).
@@ -121,7 +121,7 @@ export function normalizeToAppError(input: unknown, fallbackMessage?: string, co
 ```
 
 ### (d) catalog.ts — D1 validateDetails (VALIDATION, RATE_LIMITED)
-- [ ] 두 코드에 type-guard 추가:
+- [x] 두 코드에 type-guard 추가:
 
 ```typescript
   VALIDATION: {
@@ -140,7 +140,7 @@ export function normalizeToAppError(input: unknown, fallbackMessage?: string, co
 (검증: validateCatalog는 여전히 통과; finalize 게이트(system.ts:286)가 invalid VALIDATION/RATE_LIMITED details를 fallback으로 강등. `sys.fail("VALIDATION", {잘못})`이 컴파일 에러 — P3a에서 드롭한 `@ts-expect-error` 테스트를 이제 추가.)
 
 ### (e) handle-error.ts — 결정 시스템 위임자로 재작성(D4)
-- [ ] 재작성:
+- [x] 재작성:
 
 ```typescript
 // error/handle-error.ts — 결정 시스템 위임자. 정책은 resolveErrorDecision; 실행은 executeErrorDecision.
@@ -177,22 +177,22 @@ export const createHandleError =
 (구 `resolvePolicy`/`ResolvedAppError`/`Reporter`/`Presenter`/`Notifier`/`PresentAction`/`LogLevel` import 전부 제거. Presenter 없음. fan-out 순서는 executeTelemetryDecision(system.ts:347 capture→breadcrumb→alert)이 보존.)
 
 ### (f) handler.ts — initHandleError 재구성 + setActiveErrorRegistry 제거
-- [ ] `setActiveErrorRegistry(deps.registry)` 호출 삭제. `initHandleError`를 신 `createHandleError(system, sinks, ctx, occurrence)` 기반으로. 싱글턴 `handleError`/`setErrorUser`/`safeHandler` 시그니처 조정. (구 `HandleErrorDeps` 의존 제거.)
+- [x] `setActiveErrorRegistry(deps.registry)` 호출 삭제. `initHandleError`를 신 `createHandleError(system, sinks, ctx, occurrence)` 기반으로. 싱글턴 `handleError`/`setErrorUser`/`safeHandler` 시그니처 조정. (구 `HandleErrorDeps` 의존 제거.)
 
 ### (g) types.ts — HandleErrorDeps 개편
-- [ ] `HandleErrorDeps`(registry+구 sink)를 삭제하거나 신 형태(`{ system: DecisionSystem; reporter: ReporterSink; notifier: NotifierSink }`)로. 구 `Reporter`/`Presenter`/`Notifier` import 제거(그 인터페이스 파일 자체는 유지).
+- [x] `HandleErrorDeps`(registry+구 sink)를 삭제하거나 신 형태(`{ system: DecisionSystem; reporter: ReporterSink; notifier: NotifierSink }`)로. 구 `Reporter`/`Presenter`/`Notifier` import 제거(그 인터페이스 파일 자체는 유지).
 
 ### (h) 테스트 마이그레이션 (같은 커밋)
-- [ ] `make-error.test.ts`: `AppError` 생산 단언; severity/retryable 옵션 단언 제거; invalid details → UNKNOWN_* fallback 유지.
-- [ ] `rehydration.test.ts`: `DomainError`→`AppError`, `normalizeToDomainError`→`normalizeToAppError`, `isDomainError`→`isAppError`; fromSerialized 라운드트립 + UNKNOWN_* fallback + correlationId 보존. 신 guards(isClientErrorPayload) 경로.
-- [ ] `handle-error.test.ts`: 구 파이프라인(resolvePolicy/present/ResolvedAppError) 테스트를 **신 위임자 테스트로 재작성** — 테스트용 `createDecisionSystem(CANONICAL_ERROR_SEMANTICS, ops)` + spy sinks를 만들어, `createHandleError`가 (1) DecisionFailure 반환 (2) capture/breadcrumb/alert를 decision.telemetry대로 호출 (3) options.telemetry override 적용. **단정 수는 줄어도 됨** — 엔진 동작은 decision-system.test.ts가 이미 커버하므로 여기선 위임 배선만 검증.
-- [ ] `impact-breadcrumb.test.ts`: 구 handle-error breadcrumb 동작 테스트 → **삭제**(신 breadcrumb는 executeTelemetryDecision, decision-system.test.ts가 커버). 삭제 사유를 커밋 메시지에 명시.
-- [ ] `composite.test.ts`·`i18n-completeness.test.ts`: **무수정**(구 Reporter/composite·translator 미변경이라 그대로 green).
-- [ ] **신규**(decision-system.test.ts 또는 신 파일): `@ts-expect-error sys.fail("VALIDATION", {잘못된 details})` per-code 음성 타입 테스트(D1 활성화 확인).
+- [x] `make-error.test.ts`: `AppError` 생산 단언; severity/retryable 옵션 단언 제거; invalid details → UNKNOWN_* fallback 유지.
+- [x] `rehydration.test.ts`: `DomainError`→`AppError`, `normalizeToDomainError`→`normalizeToAppError`, `isDomainError`→`isAppError`; fromSerialized 라운드트립 + UNKNOWN_* fallback + correlationId 보존. 신 guards(isClientErrorPayload) 경로.
+- [x] `handle-error.test.ts`: 구 파이프라인(resolvePolicy/present/ResolvedAppError) 테스트를 **신 위임자 테스트로 재작성** — 테스트용 `createDecisionSystem(CANONICAL_ERROR_SEMANTICS, ops)` + spy sinks를 만들어, `createHandleError`가 (1) DecisionFailure 반환 (2) capture/breadcrumb/alert를 decision.telemetry대로 호출 (3) options.telemetry override 적용. **단정 수는 줄어도 됨** — 엔진 동작은 decision-system.test.ts가 이미 커버하므로 여기선 위임 배선만 검증.
+- [x] `impact-breadcrumb.test.ts`: 구 handle-error breadcrumb 동작 테스트 → **삭제**(신 breadcrumb는 executeTelemetryDecision, decision-system.test.ts가 커버). 삭제 사유를 커밋 메시지에 명시.
+- [x] `composite.test.ts`·`i18n-completeness.test.ts`: **무수정**(구 Reporter/composite·translator 미변경이라 그대로 green).
+- [x] **신규**(decision-system.test.ts 또는 신 파일): `@ts-expect-error sys.fail("VALIDATION", {잘못된 details})` per-code 음성 타입 테스트(D1 활성화 확인).
 
 ### (i) green 게이트 + 단일 커밋
-- [ ] `cd packages/error-core && pnpm typecheck && pnpm test` → **green**(카운트 변동: impact-breadcrumb 삭제 -N, handle-error 축소, +@ts-expect-error). 워크스페이스: `pnpm --filter error-core ...`만 요구. `pnpm typecheck`(전체)는 **error-next/apps 실패 정상, error-adapters는 PASS여야 함**(구 인터페이스 무수정 확인 — 만약 error-adapters가 깨지면 구 sink를 잘못 건드린 것 → 되돌릴 것).
-- [ ] 커밋:
+- [x] `cd packages/error-core && pnpm typecheck && pnpm test` → **green**(카운트 변동: impact-breadcrumb 삭제 -N, handle-error 축소, +@ts-expect-error). 워크스페이스: `pnpm --filter error-core ...`만 요구. `pnpm typecheck`(전체)는 **error-next/apps 실패 정상, error-adapters는 PASS여야 함**(구 인터페이스 무수정 확인 — 만약 error-adapters가 깨지면 구 sink를 잘못 건드린 것 → 되돌릴 것).
+- [x] 커밋:
 ```bash
 git add packages/error-core/src
 git commit -m "feat(error-core)!: cut inbound path + handle-error to AppError/decision model (P3b-ii)
@@ -200,7 +200,7 @@ git commit -m "feat(error-core)!: cut inbound path + handle-error to AppError/de
 BREAKING: error-next/apps no longer compile against error-core until P5/P8 (kernel-only scope).
 error-adapters stays green (old Reporter/Presenter/Notifier interfaces untouched)."
 ```
-- [ ] 마커:
+- [x] 마커:
 ```bash
 git commit --allow-empty -m "chore(error-core): P3b-ii complete — inbound on AppError; error-next/apps RED until P5/P8; error-adapters green"
 ```

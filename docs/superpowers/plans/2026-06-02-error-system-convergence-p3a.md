@@ -1,6 +1,6 @@
 # Error System 수렴 — P3a (AppError + 결정 시스템 팩토리, 비파괴 착륙) 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. 구현 시 superpowers:test-driven-development(red→green→refactor)를 따른다.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax. 구현 시 superpowers:test-driven-development(red→green→refactor)를 따른다.
 
 **Goal:** 순수 데이터 `AppError` 클래스와 `createDecisionSystem` 팩토리(+`fail`/`ok`/`appError`/`finalize*`/`toClientErrorPayload`/`executeErrorDecision`/Result 모델)를 `error-core`에 **추가(additive)**로 착륙시킨다. 이미 grafted된 `decision/{resolve,validate,catalog,types}`에 연결하고, **구 `DomainError`/정책 getter/ALS는 그대로 둔다.** 끝나면 새 모델이 error-core 안에서 테스트로 보증되고, 구 스택과 모든 기존 테스트는 여전히 green.
 
@@ -53,7 +53,7 @@
 - Modify: `packages/error-core/src/decision/types.ts`
 - Test: `packages/error-core/src/__tests__/decision-system.test.ts` (이 Task에서 생성, 타입 컴파일 단언으로 시작)
 
-- [ ] **Step 1: 실패 테스트(컴파일) 작성** — `decision-system.test.ts` 최상단에 타입 존재 단언:
+- [x] **Step 1: 실패 테스트(컴파일) 작성** — `decision-system.test.ts` 최상단에 타입 존재 단언:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -78,7 +78,7 @@ describe("P3a decision types", () => {
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/decision-system.test.ts` → FAIL (`ClientErrorPayload` not exported / `messageVars` not on UserErrorDecision).
 
-- [ ] **Step 2: types.ts 수정.** `packages/error-core/src/decision/types.ts`에 다음을 추가한다. (a) `UserErrorDecision`에 `messageVars?` 필드 추가:
+- [x] **Step 2: types.ts 수정.** `packages/error-core/src/decision/types.ts`에 다음을 추가한다. (a) `UserErrorDecision`에 `messageVars?` 필드 추가:
 
 ```typescript
 export interface UserErrorDecision {
@@ -118,9 +118,9 @@ export interface ClientErrorPayload {
 
 > 위 테스트가 `ReporterSink`/`NotifierSink`를 import하므로, A1에서는 그 import 줄을 **빼고** ClientErrorPayload/UserErrorDecision만 검증한다. sinks 단언은 A2 Step 4에서 추가.
 
-- [ ] **Step 3:** `cd packages/error-core && pnpm vitest run src/__tests__/decision-system.test.ts` → PASS. `pnpm typecheck` → PASS. `pnpm test`(error-core) → 기존 292 + 신규 2 = 294, 회귀 없음.
+- [x] **Step 3:** `cd packages/error-core && pnpm vitest run src/__tests__/decision-system.test.ts` → PASS. `pnpm typecheck` → PASS. `pnpm test`(error-core) → 기존 292 + 신규 2 = 294, 회귀 없음.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add packages/error-core/src/decision/types.ts packages/error-core/src/__tests__/decision-system.test.ts
@@ -135,7 +135,7 @@ git commit -m "feat(error-core): add ClientErrorPayload + messageVars to decisio
 - Modify: `packages/error-core/src/decision/types.ts` (sinks)
 - Test: `packages/error-core/src/__tests__/app-error-puredata.test.ts`
 
-- [ ] **Step 1: codes.ts 생성** — `ErrorCode` SSOT를 decision/로 노출(D2/D7). P3a에서는 registry.ts의 union을 재노출 + frozen set:
+- [x] **Step 1: codes.ts 생성** — `ErrorCode` SSOT를 decision/로 노출(D2/D7). P3a에서는 registry.ts의 union을 재노출 + frozen set:
 
 ```typescript
 // error-core/decision/codes.ts — 알려진 에러 코드 SSOT(P3e에서 registry.ts 삭제 시 정본).
@@ -146,7 +146,7 @@ export const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set(Object.keys(DEFAUL
 export const isKnownErrorCode = (code: string): code is ErrorCode => KNOWN_ERROR_CODES.has(code);
 ```
 
-- [ ] **Step 2: 실패 테스트 작성** — `app-error-puredata.test.ts`:
+- [x] **Step 2: 실패 테스트 작성** — `app-error-puredata.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -198,7 +198,7 @@ describe("AppError (pure data)", () => {
 
 Run → FAIL (module not found).
 
-- [ ] **Step 3: app-error.ts 생성.** 포팅 출처: EDS `DomainError`(`packages/error-decision-system/src/index.ts:196-225`) + `appError`(235-246) + `isDomainError`(248). 변경점: 클래스명 `AppError`, `name="AppError"`, 구 error-core의 `correlationId`/`digest` 필드 추가, 구 `app-error.ts`의 `toSerialized`/`fromSerialized`/`fromClientSerialized` 로직(166-217)을 **AppError 반환 + 통합 모델**로 이식.
+- [x] **Step 3: app-error.ts 생성.** 포팅 출처: EDS `DomainError`(`packages/error-decision-system/src/index.ts:196-225`) + `appError`(235-246) + `isDomainError`(248). 변경점: 클래스명 `AppError`, `name="AppError"`, 구 error-core의 `correlationId`/`digest` 필드 추가, 구 `app-error.ts`의 `toSerialized`/`fromSerialized`/`fromClientSerialized` 로직(166-217)을 **AppError 반환 + 통합 모델**로 이식.
 
 ```typescript
 // error-core/decision/app-error.ts — 통합 순수 데이터 에러 클래스(구 DomainError + EDS DomainError 합집합).
@@ -280,7 +280,7 @@ export { isKnownErrorCode };
 
 > 포팅 충실도: EDS `DomainError` 본문(196-225)과 비교해 필드/생성자 동작이 일치하는지 확인. `details` 재검증(zod)은 P3a에선 하지 않음(D1: 검증은 finalize 시 `semantics.validateDetails`). `fromSerialized`의 UNKNOWN_* fallback은 P3b에서 normalize와 함께 정교화(여기선 코드 그대로 재수화).
 
-- [ ] **Step 4: types.ts에 sinks 추가** (A1에서 미룬 것). `decision/types.ts`에:
+- [x] **Step 4: types.ts에 sinks 추가** (A1에서 미룬 것). `decision/types.ts`에:
 
 ```typescript
 import type { AppError } from "./app-error";
@@ -309,7 +309,7 @@ it("ReporterSink/NotifierSink reference AppError", () => {
 
 > import cycle 주의: `types.ts` → `app-error.ts` → `types.ts`(OccurrenceContext/ClientErrorPayload). **타입 전용 import**(`import type`)이므로 런타임 순환은 없음. typecheck로 확인. 순환이 문제되면 sinks를 `decision/sinks.ts` 별도 파일로 분리.
 
-- [ ] **Step 5:** `pnpm vitest run` 두 테스트 PASS, `pnpm typecheck` PASS, `pnpm test`(error-core) green(294+). **커밋:**
+- [x] **Step 5:** `pnpm vitest run` 두 테스트 PASS, `pnpm typecheck` PASS, `pnpm test`(error-core) green(294+). **커밋:**
 
 ```bash
 git add packages/error-core/src/decision/app-error.ts packages/error-core/src/decision/codes.ts packages/error-core/src/decision/types.ts packages/error-core/src/__tests__/app-error-puredata.test.ts packages/error-core/src/__tests__/decision-system.test.ts
@@ -322,9 +322,9 @@ git commit -m "feat(error-core): add pure-data AppError + appError/isAppError + 
 - Modify: `packages/error-core/src/decision/resolve.ts`
 - Test: `packages/error-core/src/__tests__/decision-resolve.test.ts` (기존; 단언 추가)
 
-- [ ] **Step 1:** `resolve.ts`의 `resolveErrorDecision`이 만드는 `UserErrorDecision`에 `messageVars`를 추가한다. **D5**에 따라 RATE_LIMITED 카운트다운은 render-time이므로 **여기서는 기본 미설정**, 단 향후 비-시변 보간을 위해 필드만 통과(현재는 `undefined`). 구체적으로 `user` 객체에 `messageVars: undefined`를 명시하거나 생략(타입상 optional). **변경 최소화**: `UserErrorDecision`이 이미 `messageVars?`를 허용하므로 resolve.ts는 그대로 둬도 컴파일된다 → 이 Task는 **단언만 추가**해 "resolve가 messageVars를 깨지 않는다"를 고정.
+- [x] **Step 1:** `resolve.ts`의 `resolveErrorDecision`이 만드는 `UserErrorDecision`에 `messageVars`를 추가한다. **D5**에 따라 RATE_LIMITED 카운트다운은 render-time이므로 **여기서는 기본 미설정**, 단 향후 비-시변 보간을 위해 필드만 통과(현재는 `undefined`). 구체적으로 `user` 객체에 `messageVars: undefined`를 명시하거나 생략(타입상 optional). **변경 최소화**: `UserErrorDecision`이 이미 `messageVars?`를 허용하므로 resolve.ts는 그대로 둬도 컴파일된다 → 이 Task는 **단언만 추가**해 "resolve가 messageVars를 깨지 않는다"를 고정.
 
-- [ ] **Step 2:** `decision-resolve.test.ts`에 한 케이스 추가:
+- [x] **Step 2:** `decision-resolve.test.ts`에 한 케이스 추가:
 ```typescript
   it("RATE_LIMITED retains retryAfterMs on the decision for render-time {seconds} (D5)", () => {
     const d = decide("RATE_LIMITED", occ({ interaction: "form-submit", uiScope: "form" }), { retryAfterMs: 5000 });
@@ -336,7 +336,7 @@ git commit -m "feat(error-core): add pure-data AppError + appError/isAppError + 
 
 Run → 기대대로 동작 확인. 만약 `d.user.retryAfterMs`가 미설정이면, resolve.ts의 `resolveErrorDecision`에서 `retryAfterMs: error.retryAfterMs`가 user에 들어가는지 확인(P2b 포팅에 포함됨).
 
-- [ ] **Step 3:** `pnpm test`(error-core) green. **커밋:**
+- [x] **Step 3:** `pnpm test`(error-core) green. **커밋:**
 ```bash
 git add packages/error-core/src/decision/resolve.ts packages/error-core/src/__tests__/decision-resolve.test.ts
 git commit -m "test(error-core): lock retryAfterMs passthrough for render-time messageVars (P3a, D5)"
@@ -350,13 +350,13 @@ git commit -m "test(error-core): lock retryAfterMs passthrough for render-time m
 
 이 Task가 P3a의 핵심 포팅이다. EDS `index.ts`에서 **커널 조각만** 포팅하고, 이미 grafted된 `../decision/{resolve,validate,catalog}`를 재사용(중복 삭제).
 
-- [ ] **Step 1: 포팅 대상 확정(읽기).** `packages/error-decision-system/src/index.ts`를 열어 다음 심볼의 현재 본문/시그니처를 확인한다:
+- [x] **Step 1: 포팅 대상 확정(읽기).** `packages/error-decision-system/src/index.ts`를 열어 다음 심볼의 현재 본문/시그니처를 확인한다:
   - 타입: `Success`(174), `FailureDraft`(179), `DecisionFailure`(186), `DecisionResult`(194), `DetailsOf`(270), `ErrorCatalog`/`OperationCatalog`(261-262)
   - free 함수: `ok`(227), `fail`(229-233), `appError`(235-246 — **이미 A2에 있음; system.ts는 A2의 것을 재노출**), `isFailureDraft`(255-259)
   - 팩토리: `createDecisionSystem`(615-931) — 내부의 `lookupSemantics`, `defineOperation`/`getOperation`/`makeOccurrence`, `finalizeDomainError`(→`finalizeAppError`로 rename)/`finalizeFailure`(735)/`finalizeUnknown`(766), `toClientErrorPayload`(690-705), `pickAllowlistedDetails`(437-445), `executeTelemetryDecision`/`executeErrorDecision`
   - **삭제(중복)**: 팩토리 내부/모듈의 `resolveDisclosure/Surface/Action/MessageKey/Target/Telemetry`(447-613), 사설 `resolveErrorDecision`(665-688), `validateCatalog`(418-435), `baselineDisclosureLevels`/`reachableDisclosureLevels`(372-413), `defaultSemantics` — 전부 `../decision/{resolve,validate}`에 이미 있으므로 **포팅하지 말고 import**.
 
-- [ ] **Step 2: 실패 테스트 작성**(`decision-system.test.ts`에 추가) — EDS `invariants.test.ts` + `decision.test.ts` 커버리지를 CANONICAL_ERROR_SEMANTICS 기준으로 전사. 최소:
+- [x] **Step 2: 실패 테스트 작성**(`decision-system.test.ts`에 추가) — EDS `invariants.test.ts` + `decision.test.ts` 커버리지를 CANONICAL_ERROR_SEMANTICS 기준으로 전사. 최소:
 
 ```typescript
 import { createDecisionSystem } from "../decision/system";
@@ -416,7 +416,7 @@ describe("createDecisionSystem (P3a)", () => {
 
 Run → FAIL(module not found).
 
-- [ ] **Step 3: system.ts 작성(포팅).** EDS `createDecisionSystem`(615-931)을 포팅하되:
+- [x] **Step 3: system.ts 작성(포팅).** EDS `createDecisionSystem`(615-931)을 포팅하되:
   - 카탈로그/operations는 options로 주입(이미 EDS가 그러함).
   - inlined `resolve*`/`resolveErrorDecision`/`validateCatalog`/`baselineDisclosureLevels`/`reachableDisclosureLevels`/`defaultSemantics`를 **삭제하고** `import { resolveErrorDecision } from "./resolve"; import { validateCatalog } from "./validate";`로 대체.
   - `appError`/`ok`/`fail`/`isFailureDraft`/`Success`/`FailureDraft`/`DecisionFailure`/`DecisionResult`/`DetailsOf`는 A2의 `appError`를 쓰고 나머지는 EDS에서 포팅. `finalizeDomainError`→`finalizeAppError`(AppError 사용).
@@ -427,7 +427,7 @@ Run → FAIL(module not found).
 
 > 본 Task는 verbatim 포팅이 핵심이라 EDS 소스를 정본으로 둔다. 함수 본문을 그대로 옮기고 위 대체/rename만 적용. 인라인 중복(resolve*/validateCatalog)은 반드시 삭제하고 ../decision에서 import(중복 정의는 P0-P2 산출물과 어긋남).
 
-- [ ] **Step 4:** 두 테스트(app-error-puredata, decision-system) PASS, `pnpm typecheck` PASS, `pnpm test`(error-core) green(기존 + 신규). **커밋:**
+- [x] **Step 4:** 두 테스트(app-error-puredata, decision-system) PASS, `pnpm typecheck` PASS, `pnpm test`(error-core) green(기존 + 신규). **커밋:**
 ```bash
 git add packages/error-core/src/decision/system.ts packages/error-core/src/__tests__/decision-system.test.ts
 git commit -m "feat(error-core): port createDecisionSystem factory + finalize/degrade/execute (P3a)"
@@ -439,7 +439,7 @@ git commit -m "feat(error-core): port createDecisionSystem factory + finalize/de
 - Modify: `packages/error-core/src/decision/index.ts`
 - Modify: `packages/error-core/src/index.ts`
 
-- [ ] **Step 1:** `decision/index.ts`에 새 export 추가(구 줄 유지):
+- [x] **Step 1:** `decision/index.ts`에 새 export 추가(구 줄 유지):
 ```typescript
 export * from "./types";
 export * from "./resolve";
@@ -450,11 +450,11 @@ export * from "./codes";
 export { CANONICAL_ERROR_SEMANTICS } from "./catalog";
 ```
 
-- [ ] **Step 2:** 최상위 `index.ts`는 이미 `export * from "./decision"`가 있으므로 새 심볼이 자동 노출된다. **이름 충돌 확인**: 구 `app-error.ts`의 `type AppError = DomainError` alias와 새 `class AppError`가 충돌하는지 `pnpm typecheck`로 본다. 충돌 시(파일 상단 ⚠️ 노트대로): 최상위 `index.ts`에서 구 `app-error`의 `AppError` 타입 alias 재노출을 제거(`export { DomainError, isDomainError, ... } from "./app-error"`로 명시 export하고 `AppError` 타입은 빼기). `ErrorCode`도 `codes.ts`와 `registry.ts` 양쪽에서 나오면 한쪽만 노출.
+- [x] **Step 2:** 최상위 `index.ts`는 이미 `export * from "./decision"`가 있으므로 새 심볼이 자동 노출된다. **이름 충돌 확인**: 구 `app-error.ts`의 `type AppError = DomainError` alias와 새 `class AppError`가 충돌하는지 `pnpm typecheck`로 본다. 충돌 시(파일 상단 ⚠️ 노트대로): 최상위 `index.ts`에서 구 `app-error`의 `AppError` 타입 alias 재노출을 제거(`export { DomainError, isDomainError, ... } from "./app-error"`로 명시 export하고 `AppError` 타입은 빼기). `ErrorCode`도 `codes.ts`와 `registry.ts` 양쪽에서 나오면 한쪽만 노출.
 
-- [ ] **Step 3:** `pnpm typecheck` PASS, `pnpm test`(error-core) green. 워크스페이스 `cd /Users/hm2/Private/error-system && pnpm typecheck` → **error-core는 PASS**; error-next/adapters/decision-system도 P3a는 추가만이라 여전히 PASS여야 함(구 표면 무변경). 만약 error-next가 깨지면 충돌 처리(Step 2)가 구 표면을 건드린 것 → 되돌려 구 표면 보존.
+- [x] **Step 3:** `pnpm typecheck` PASS, `pnpm test`(error-core) green. 워크스페이스 `cd /Users/hm2/Private/error-system && pnpm typecheck` → **error-core는 PASS**; error-next/adapters/decision-system도 P3a는 추가만이라 여전히 PASS여야 함(구 표면 무변경). 만약 error-next가 깨지면 충돌 처리(Step 2)가 구 표면을 건드린 것 → 되돌려 구 표면 보존.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 ```bash
 git add packages/error-core/src/decision/index.ts packages/error-core/src/index.ts
 git commit -m "feat(error-core): export AppError + decision-system from barrel, additive (P3a)"
@@ -464,10 +464,10 @@ git commit -m "feat(error-core): export AppError + decision-system from barrel, 
 
 **Files:** 없음(검증)
 
-- [ ] **Step 1:** `cd packages/error-core && pnpm test` → 기존 292 + 신규(app-error-puredata + decision-system + resolve 추가분) 전부 PASS.
-- [ ] **Step 2:** `cd /Users/hm2/Private/error-system && pnpm typecheck && pnpm test` → **모든 패키지 PASS**(error-adapters 12 / error-decision-system 43 / error-next 37 불변; error-core 증가). 구 스택 무회귀가 P3a의 핵심 불변식.
-- [ ] **Step 3:** 동등성 스폿체크 — `decision-system.test.ts`의 시나리오가 EDS `decision.test.ts`의 대응 케이스와 같은 결정을 내는지 1-2개 교차 확인(엔진이 정본).
-- [ ] **Step 4: P3a 완료 마커 커밋**
+- [x] **Step 1:** `cd packages/error-core && pnpm test` → 기존 292 + 신규(app-error-puredata + decision-system + resolve 추가분) 전부 PASS.
+- [x] **Step 2:** `cd /Users/hm2/Private/error-system && pnpm typecheck && pnpm test` → **모든 패키지 PASS**(error-adapters 12 / error-decision-system 43 / error-next 37 불변; error-core 증가). 구 스택 무회귀가 P3a의 핵심 불변식.
+- [x] **Step 3:** 동등성 스폿체크 — `decision-system.test.ts`의 시나리오가 EDS `decision.test.ts`의 대응 케이스와 같은 결정을 내는지 1-2개 교차 확인(엔진이 정본).
+- [x] **Step 4: P3a 완료 마커 커밋**
 ```bash
 git commit --allow-empty -m "chore(error-core): P3a complete — AppError + decision-system landed additively; old DomainError untouched"
 ```

@@ -25,7 +25,7 @@
 **한 커밋.** error-core green 게이트는 끝에 1회.
 
 ### (a) result.ts — wire Result + degrade(D3)
-- [ ] 재작성:
+- [x] 재작성:
 
 ```typescript
 // error/result.ts — wire 계약. in-process DecisionResult는 decision/system; wire는 ClientErrorPayload만.
@@ -46,7 +46,7 @@ export const degrade = <T>(r: DecisionResult<T>): Result<T> =>
 (구 `actionFailure`/`toClientSerialized` import 제거. `Success`는 decision/system의 것으로 통일.)
 
 ### (b) route-handler.ts — 시스템 주입형 responder(D5 status)
-- [ ] 재작성:
+- [x] 재작성:
 
 ```typescript
 // error/route-handler.ts — AppError/unknown → messageless, details-gated HTTP Response.
@@ -69,7 +69,7 @@ export const createErrorResponder =
 (구 `toErrorResponse(e, correlationId)` 시그니처 제거 — error-next route handler(P5/red)가 새 형태 채택. `construct`/`DomainError`/`toClientSerialized` import 제거.)
 
 ### (c) network-boundary.ts — AppError 생산 + D2 guards
-- [ ] P3b-ii shim 제거, 다음으로:
+- [x] P3b-ii shim 제거, 다음으로:
   - `import { AppError, appError, isSerializedError, isClientErrorPayload, type SerializedError } from "./decision/app-error";` (구 construct shim/`makeError` 로컬 삭제).
   - 내부 `makeError`(construct shim) → `appError(code, details, opts)` 직접 호출 또는 얇은 로컬 `const mk = (code, details=null, cause?) => appError(code, details, {cause})`.
   - `withCorrelation(err: AppError, correlationId?)`: `correlationId && !err.correlationId ? AppError.fromSerialized({ ...err.toSerialized(), correlationId }) : err`.
@@ -79,18 +79,18 @@ export const createErrorResponder =
   - offline/timeout/abort 판별 + 쿠키/헤더 correlationId 로직 **verbatim 보존**.
 
 ### (d) serialize-client.ts 삭제 + 배럴 정리
-- [ ] `rm packages/error-core/src/serialize-client.ts`.
-- [ ] `index.ts`(배럴)에서 `toClientSerialized`/`gateClientDetails`/`DETAILS_ALLOWLIST`/`ClientSerializedError` export 제거. `degrade`/`createErrorResponder`/`ClientErrorPayload`(decision 경유) 추가 노출 확인. (구 `app-error.ts`의 `ClientSerializedError` 타입 자체는 P3e까지 잔존하나 배럴에서 내리거나 유지는 컴파일 따라 — 내부 미사용이면 유지 무해.)
-- [ ] grep: `toClientSerialized`/`gateClientDetails`/`DETAILS_ALLOWLIST`의 **error-core 내부** 잔존 importer 0 확인 후 삭제(있으면 그 소비자부터 컷).
+- [x] `rm packages/error-core/src/serialize-client.ts`.
+- [x] `index.ts`(배럴)에서 `toClientSerialized`/`gateClientDetails`/`DETAILS_ALLOWLIST`/`ClientSerializedError` export 제거. `degrade`/`createErrorResponder`/`ClientErrorPayload`(decision 경유) 추가 노출 확인. (구 `app-error.ts`의 `ClientSerializedError` 타입 자체는 P3e까지 잔존하나 배럴에서 내리거나 유지는 컴파일 따라 — 내부 미사용이면 유지 무해.)
+- [x] grep: `toClientSerialized`/`gateClientDetails`/`DETAILS_ALLOWLIST`의 **error-core 내부** 잔존 importer 0 확인 후 삭제(있으면 그 소비자부터 컷).
 
 ### (e) 테스트 마이그레이션
-- [ ] `serialize-client.test.ts`(217줄, 누출 게이트) → **신 누출 게이트 테스트로 이전**: 테스트 `createDecisionSystem(CANONICAL_ERROR_SEMANTICS, ops)`로 `system.toClientErrorPayload(error, decision)`(또는 `finalizeUnknown(...).payload`)를 15개 코드에 대해 검증. **보존할 불변식(verbatim intent):** message/cause 미노출, JSON-safe, sibling 키 strip, VALIDATION.fieldErrors 통과, RATE_LIMITED.retryAfterMs 통과, FORBIDDEN.requiredRole/NOT_FOUND.resource/SCHEMA_MISMATCH.endpoint/HTTP.status 차단, surface/target 부재. 파일명은 `serialize-client.test.ts` 유지하되 대상이 toClientErrorPayload. (구 `gateClientDetails`/`DETAILS_ALLOWLIST` 직접 단언 → 카탈로그 detailsAllowlist + 게이트 결과로.)
-- [ ] `network-boundary.test.ts`(P3b-ii construct shim) → shim 제거, AppError/신 guards로. 26개 케이스의 transport-코드/Retry-After/correlation 단언 보존. (`as DomainError` → AppError; isSerializedError 경로 신 guard.)
-- [ ] route-handler 테스트가 없으면 신규 추가(선택): `createErrorResponder(system)`가 status=defaultHttpStatus, body=payload(message 없음), x-request-id 헤더를 내는지 1–2 케이스.
+- [x] `serialize-client.test.ts`(217줄, 누출 게이트) → **신 누출 게이트 테스트로 이전**: 테스트 `createDecisionSystem(CANONICAL_ERROR_SEMANTICS, ops)`로 `system.toClientErrorPayload(error, decision)`(또는 `finalizeUnknown(...).payload`)를 15개 코드에 대해 검증. **보존할 불변식(verbatim intent):** message/cause 미노출, JSON-safe, sibling 키 strip, VALIDATION.fieldErrors 통과, RATE_LIMITED.retryAfterMs 통과, FORBIDDEN.requiredRole/NOT_FOUND.resource/SCHEMA_MISMATCH.endpoint/HTTP.status 차단, surface/target 부재. 파일명은 `serialize-client.test.ts` 유지하되 대상이 toClientErrorPayload. (구 `gateClientDetails`/`DETAILS_ALLOWLIST` 직접 단언 → 카탈로그 detailsAllowlist + 게이트 결과로.)
+- [x] `network-boundary.test.ts`(P3b-ii construct shim) → shim 제거, AppError/신 guards로. 26개 케이스의 transport-코드/Retry-After/correlation 단언 보존. (`as DomainError` → AppError; isSerializedError 경로 신 guard.)
+- [x] route-handler 테스트가 없으면 신규 추가(선택): `createErrorResponder(system)`가 status=defaultHttpStatus, body=payload(message 없음), x-request-id 헤더를 내는지 1–2 케이스.
 
 ### (f) green 게이트 + 단일 커밋
-- [ ] `cd packages/error-core && pnpm typecheck && pnpm test` → green. (카운트: serialize-client.test 이전, network-boundary.test 유지, route-handler 신규.) 워크스페이스는 error-next/adapters/apps red 유지(예상). `pnpm --filter error-adapters test` → P3b-ii와 **동일한 4 fail(sonner-presenter)만** — P3c가 새로 깨는 것 없음 확인.
-- [ ] 커밋:
+- [x] `cd packages/error-core && pnpm typecheck && pnpm test` → green. (카운트: serialize-client.test 이전, network-boundary.test 유지, route-handler 신규.) 워크스페이스는 error-next/adapters/apps red 유지(예상). `pnpm --filter error-adapters test` → P3b-ii와 **동일한 4 fail(sonner-presenter)만** — P3c가 새로 깨는 것 없음 확인.
+- [x] 커밋:
 ```bash
 git add packages/error-core/src
 git rm packages/error-core/src/serialize-client.ts

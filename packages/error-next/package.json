@@ -1,6 +1,7 @@
 {
   "name": "error-next",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "Next.js(App Router) + React 통합 계층 — 뮤테이션/폼/라우트/네비게이션 경계, 요청별 서버 컴포지션 루트, useErrorHandler, QueryClient, 에러 바운더리 컴포넌트. 클라이언트 표면은 `.`, 서버 전용 표면은 `./server`.",

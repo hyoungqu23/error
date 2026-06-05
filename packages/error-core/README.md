@@ -9,7 +9,7 @@
 - **카탈로그(SSOT)** — `CANONICAL_ERROR_SEMANTICS`(15코드 × category/sensitivity/defaultHttpStatus/defaultRetryable/messageKeys/detailsExposure/validateDetails). 런타임 활성-레지스트리는 없다 — 정책은 주입된 `DecisionSystem`이 전부 소유한다.
 - **결정 엔진** — `createDecisionSystem` / `resolveErrorDecision`: 같은 코드라도 occurrence 컨텍스트(uiScope/interaction/criticality)에 따라 surface/disclosure/action/telemetry가 달라진다.
 - **에러 모델** — 순수-데이터 `AppError`(정책 getter 없음), `makeError`(catalog `validateDetails` + UNKNOWN_\* 폴백), 정규화/재수화(`normalizeToAppError`).
-- **단일 누출게이트** — `toClientErrorPayload`: free-text `message` 미전송 + `details`는 catalog allowlist shallow-pick. wire `Result`는 `degrade()`로 이 payload만 건넌다. `networkBoundary`가 이 public DTO를 다시 `AppError`로 재수화한다.
+- **단일 누출게이트** — `toClientErrorPayload`: free-text `message` 미전송 + `details`는 catalog allowlist shallow-pick. wire `Result`는 `degrade()`로 이 payload만 건넌다. `networkBoundary`가 이 public DTO를 다시 `AppError`로 재수화한다. allowlist pick 로직은 `pickAllowlistedDetails`로 export되어 어댑터(예: `error-adapters/sentry-reporter`의 클라이언트 details 게이트)가 같은 구현을 재사용한다 — 게이트 로직 drift가 구조적으로 불가능하다.
 - **텔레메트리 3-sink 계약** — `ReporterSink`/`NotifierSink`(파이프라인 `executeErrorDecision`이 호출) + `Presenter`(파이프라인 밖 소비자 계약) + 단일 처리 경로(`createHandleError`).
 - **순수 재시도 정책** — `computeRetryDelay`, `parseRetryAfter`(상한 클램프, client+server safe), `retryAfterHintFromError`(인스턴스 우선).
 - **네트워크 경계** — `networkBoundary`(raw transport → `AppError`, 8개 transport 코드의 유일 생산자).

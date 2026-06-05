@@ -92,7 +92,7 @@ Operator question:
 
 프로덕션 구조는 다음처럼 나누는 것이 좋다.
 
-![alt text](image.png)
+![에러 결정 파이프라인 전체도 — Failure capture → Decision inputs(semantics/occurrence/disclosure/operational/runtime) → Error Decision Resolver → Execution(user/telemetry)](image.png)
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": { "fontFamily": "Inter, ui-sans-serif, system-ui", "primaryTextColor": "#111827", "lineColor": "#64748b" }}}%%
@@ -294,7 +294,7 @@ Boundary는 에러가 시스템으로 들어오는 문이다.
 
 Boundary는 단순히 catch하는 곳이 아니다. Boundary는 occurrence를 붙이는 곳이다.
 
-![alt text](image-1.png)
+![Raw Failure가 Boundary(catch+normalize+describe)를 거쳐 DomainError와 OccurrenceContext로 분리되어 Decision Resolver에 도달하는 흐름](image-1.png)
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": { "fontFamily": "Inter, ui-sans-serif, system-ui", "primaryTextColor": "#111827", "lineColor": "#64748b" }}}%%
@@ -576,7 +576,7 @@ Resolver는 결정만 한다.
 
 결정 순서는 중요하다.
 
-![alt text](image-2.png)
+![resolveErrorDecision 6단계 — Semantics → Disclosure → Surface → User Action → Message Key → Telemetry 순차 해소 후 ErrorDecision 산출](image-2.png)
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": { "fontFamily": "Inter, ui-sans-serif, system-ui", "primaryTextColor": "#111827", "lineColor": "#64748b" }}}%%
@@ -708,7 +708,7 @@ alert = category is fault
 
 `Result` vs `throw`는 중요하다. 하지만 이것은 최종 UX 정책이 아니라 실패 전달 방식이다.
 
-![alt text](image-3.png)
+![복구 가능성 분기 — caller가 현재 인터랙션에서 복구 가능하면 Result.Err, 불가하면 throw DomainError, 양쪽 다 resolveErrorDecision으로 수렴](image-3.png)
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": { "fontFamily": "Inter, ui-sans-serif, system-ui", "primaryTextColor": "#111827", "lineColor": "#64748b" }}}%%
@@ -755,7 +755,7 @@ flowchart TD
 
 Presentation layer는 `ErrorDecision.user`를 실행한다.
 
-![alt text](image-4.png)
+![UserErrorDecision surface 9분기 — flow-level(page/redirect/silent), interruptive(toast/dialog), local recovery(field/form/inline/empty)](image-4.png)
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": { "fontFamily": "Inter, ui-sans-serif, system-ui", "primaryTextColor": "#111827", "lineColor": "#64748b" }}}%%

@@ -1,6 +1,6 @@
 # Error System 수렴 — P3b (인바운드 컷오버) 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development + superpowers:test-driven-development. Checkbox(`- [ ]`) 스텝.
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development + superpowers:test-driven-development. Checkbox(`- [x]`) 스텝.
 
 **Goal:** error-core의 "인바운드 경로"(에러 생성·정규화 + 그 즉시 소비자)를 통합 `AppError`로 컷오버한다. **옵션 A 재분해**: 안전한 leaf(P3b-i, green 유지)와 원자 컷(P3b-ii)을 분리한다.
 
@@ -29,7 +29,7 @@ P0–P3a는 **워크스페이스 7/7 green**을 유지했다(additive). **P3b-i�
 
 **Files:** Modify `packages/error-core/src/field-errors.ts`; Test `packages/error-core/src/__tests__/field-errors.test.ts`
 
-- [ ] **Step 1: 테스트 먼저 — 신 AppError도 인식하는지 추가.** `field-errors.test.ts`에 케이스 추가(기존 4개 유지):
+- [x] **Step 1: 테스트 먼저 — 신 AppError도 인식하는지 추가.** `field-errors.test.ts`에 케이스 추가(기존 4개 유지):
 
 ```typescript
 import { appError } from "../decision/app-error";
@@ -45,7 +45,7 @@ it("returns null for AppError of another code", () => {
 
 Run: `cd packages/error-core && pnpm vitest run src/__tests__/field-errors.test.ts` → 신 케이스 FAIL(현재 `isDomainError`는 신 AppError를 — 사실 duck-type이 아니라 instanceof old만 보므로 — 미인식할 수 있음).
 
-- [ ] **Step 2: 구현 변경.** `field-errors.ts`를 다음으로:
+- [x] **Step 2: 구현 변경.** `field-errors.ts`를 다음으로:
 
 ```typescript
 // error/field-errors.ts — VALIDATION 에러의 per-field 맵 추출(구 DomainError·신 AppError 공통).
@@ -62,9 +62,9 @@ export const fieldErrorsFromError = (
 
 (`isAppError`는 단일 인자라 code는 별도 비교. `AppError.details`가 `unknown`이라 명시적 내로잉.)
 
-- [ ] **Step 3:** `pnpm vitest run src/__tests__/field-errors.test.ts` → 전부 PASS(기존 4 + 신규 2). `pnpm test`(error-core) green(322+2). `cd /Users/hm2/Private/error-system && pnpm typecheck` → **7/7 green**(아직 additive 단계).
+- [x] **Step 3:** `pnpm vitest run src/__tests__/field-errors.test.ts` → 전부 PASS(기존 4 + 신규 2). `pnpm test`(error-core) green(322+2). `cd /Users/hm2/Private/error-system && pnpm typecheck` → **7/7 green**(아직 additive 단계).
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 ```bash
 git add packages/error-core/src/field-errors.ts packages/error-core/src/__tests__/field-errors.test.ts
 git commit -m "refactor(error-core): field-errors accepts AppError (old+new) via isAppError (P3b-i)"
@@ -74,7 +74,7 @@ git commit -m "refactor(error-core): field-errors accepts AppError (old+new) via
 
 **Files:** Modify `packages/error-core/src/retry-after.ts`; Test `packages/error-core/src/__tests__/network-boundary.test.ts`(간접) 또는 신규 `retry-after.test.ts`
 
-- [ ] **Step 1: 테스트 먼저** — `retryAfterHintFromError`가 신 AppError의 인스턴스 필드(top-level `retryAfterMs`)와 구 DomainError의 `details.retryAfterMs` 둘 다 읽는지. 신규 `packages/error-core/src/__tests__/retry-after.test.ts`:
+- [x] **Step 1: 테스트 먼저** — `retryAfterHintFromError`가 신 AppError의 인스턴스 필드(top-level `retryAfterMs`)와 구 DomainError의 `details.retryAfterMs` 둘 다 읽는지. 신규 `packages/error-core/src/__tests__/retry-after.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -100,7 +100,7 @@ describe("parseRetryAfter unchanged", () => {
 
 Run → 신 케이스 FAIL.
 
-- [ ] **Step 2: 구현 변경.** `retry-after.ts`의 import + `retryAfterHintFromError`만 변경(`parseRetryAfter`는 그대로):
+- [x] **Step 2: 구현 변경.** `retry-after.ts`의 import + `retryAfterHintFromError`만 변경(`parseRetryAfter`는 그대로):
 
 ```typescript
 import { isAppError } from "./decision/app-error";
@@ -116,16 +116,16 @@ export const retryAfterHintFromError = (err: unknown): number | undefined => {
 };
 ```
 
-- [ ] **Step 3:** `pnpm vitest run src/__tests__/retry-after.test.ts` PASS. `pnpm test`(error-core) green. 워크스페이스 typecheck **7/7**.
+- [x] **Step 3:** `pnpm vitest run src/__tests__/retry-after.test.ts` PASS. `pnpm test`(error-core) green. 워크스페이스 typecheck **7/7**.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 ```bash
 git add packages/error-core/src/retry-after.ts packages/error-core/src/__tests__/retry-after.test.ts
 git commit -m "refactor(error-core): retry-after reads AppError instance retryAfterMs first (P3b-i, D5)"
 ```
 
 ### Task B3: P3b-i 게이트
-- [ ] `pnpm test`(error-core) green; `cd /Users/hm2/Private/error-system && pnpm typecheck && pnpm test` → **워크스페이스 여전히 7/7 green**(P3b-i는 additive-safe). 커밋(빈 마커 선택):
+- [x] `pnpm test`(error-core) green; `cd /Users/hm2/Private/error-system && pnpm typecheck && pnpm test` → **워크스페이스 여전히 7/7 green**(P3b-i는 additive-safe). 커밋(빈 마커 선택):
 ```bash
 git commit --allow-empty -m "chore(error-core): P3b-i complete — leaf readers accept AppError, workspace still green"
 ```

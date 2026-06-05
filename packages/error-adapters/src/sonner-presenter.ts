@@ -6,9 +6,9 @@
 //
 // Copy는 user.messageKey(disclosure가 반영된 키)를 resolveErrorMessage로 해소
 // (host translator → co-located fallback → generic line) — 절대 raw 키를 렌더하지 않는다.
-// RATE_LIMITED의 {seconds} 카운트다운(G2/G6): user.messageVars가 오면 그대로 쓰고,
-// 없으면 retryAfterMs(decision의 user.retryAfterMs 우선, error의 힌트 fallback)에서
-// 도출한다 — resolve가 아직 messageVars를 생성하지 않으므로 sink에서 보존(§5.4).
+// RATE_LIMITED의 {seconds} 카운트다운(G2/G6): resolve가 messageVars를 중앙 도출하므로
+// (resolve.ts — 인스턴스 retryAfterMs 우선, details 힌트 fallback, §5.4) 보통 user.messageVars가
+// 채워져 온다. 아래 `??` 체인은 resolve를 거치지 않은 외부 결정 객체를 위한 방어 도출이다.
 //
 // Dedupe: toast id = error.code — 같은 코드의 폭풍이 한 개의 갱신 토스트로 수렴.
 import { toast } from "sonner";

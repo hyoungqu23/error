@@ -26,6 +26,7 @@ pnpm --filter error-architecture-app build   # 프로덕션 빌드 (Turbopack)
 | `/` | 아키텍처 개요 + 데모 인덱스 |
 | `/demo/form-action` | `safeFormAction` + `useActionState`. VALIDATION 인라인 / INVALID_CREDENTIALS Result.Failure |
 | `/demo/query-retry` | `networkBoundary` + TanStack. `retryable` 배선(404 무재시도, 429/5xx 재시도) + 토스트 |
+| `/demo/server-retry` | `withRetry` 서버측 DAL 재시도: flaky 업스트림을 catalog `defaultRetryable`로 자동 재시도, 시도 횟수 표시 |
 | `/demo/boundaries` | `raise()` 인터럽트: NOT_FOUND→404, FORBIDDEN→403, fault→error.tsx |
 | `/api/flaky` | networkBoundary의 두 분기를 시연하는 가변 응답 라우트 |
 | `/api/health` | 텔레메트리 dead-man's-switch 헬스 프로브(503 escalation) |
