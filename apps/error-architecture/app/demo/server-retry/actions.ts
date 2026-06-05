@@ -1,10 +1,10 @@
 "use server";
 
 // app/demo/server-retry/actions.ts — 서버측 재시도(withRetry) 시연.
-// withRetry는 DomainError.retryable(레지스트리 SSOT)과 RATE_LIMITED의 Retry-After 힌트를 존중한다.
-// NON-retryable 코드(NOT_FOUND/VALIDATION/…)와 non-DomainError는 즉시 전파(재시도 X).
+// withRetry는 catalog defaultRetryable(카탈로그 SSOT)과 RATE_LIMITED의 Retry-After 힌트를 존중한다.
+// NON-retryable 코드(NOT_FOUND/VALIDATION/…)와 non-AppError는 즉시 전파(재시도 X).
 import { withRetry } from "error-next/server";
-import { makeError, isDomainError } from "error-core";
+import { makeError, isAppError } from "error-core";
 
 // "처음 두 번은 실패, 세 번째에 성공"하는 flaky 업스트림을 모듈 카운터로 흉내낸다(데모용).
 let attempts = 0;
@@ -31,6 +31,6 @@ export async function runWithRetryDemo(): Promise<ServerRetryResult> {
     });
     return { ok: true, value: result.value, attempts: result.attempts };
   } catch (e) {
-    return { ok: false, code: isDomainError(e) ? e.code : "UNKNOWN" };
+    return { ok: false, code: isAppError(e) ? e.code : "UNKNOWN" };
   }
 }

@@ -12,10 +12,10 @@ import { loginAction } from "./actions";
 export default function FormActionDemo() {
   const [state, formAction, isPending] = useActionState(loginAction, null);
 
-  // 주의: 여기서 state.error는 DomainError가 아니라 ClientSerializedError(경계를 건너온 plain
-  // object, message 없음)다. 따라서 DomainError 인스턴스를 받는 fieldErrorsFromError()는 쓸 수
-  // 없고, 허용목록을 통과한 details.fieldErrors를 직접 읽는다. (fieldErrorsFromError는 throw된
-  // DomainError를 다루는 쿼리 트랙용이다.)
+  // 주의: 여기서 state.error는 AppError가 아니라 ClientErrorPayload(누출게이트
+  // toClientErrorPayload를 통과해 경계를 건너온 plain object, message 없음)다. 따라서 AppError
+  // 인스턴스를 받는 fieldErrorsFromError()는 쓸 수 없고, allowlist를 통과한
+  // details.fieldErrors를 직접 읽는다. (fieldErrorsFromError는 throw된 AppError용이다.)
   const fieldErrors =
     state && !state.ok && state.error.code === "VALIDATION"
       ? (state.error.details as { fieldErrors?: Record<string, string[]> } | undefined)?.fieldErrors
@@ -23,7 +23,7 @@ export default function FormActionDemo() {
 
   const generalError =
     state && !state.ok && state.error.code !== "VALIDATION"
-      ? resolveErrorMessage(state.error.userMessageKey)
+      ? resolveErrorMessage(state.error.messageKey, null, state.error.messageVars)
       : undefined;
 
   return (
