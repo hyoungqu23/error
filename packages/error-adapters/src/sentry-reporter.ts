@@ -6,20 +6,24 @@
 // (4) it never swallows a send failure itself — it lets it propagate so the composite
 //     dead-man's-switch can account for it.
 import * as Sentry from "@sentry/nextjs";
-import type { Reporter, TelemetryContext } from "error-core/telemetry";
-import type { DomainError } from "error-core/app-error";
-import type { LogLevel } from "error-core/policy";
-import { CANONICAL_ERROR_SEMANTICS } from "error-core/decision/catalog";
-import { isExpectedCode } from "error-core/app-error";
-import type { ErrorCode } from "error-core/registry";
+import {
+  CANONICAL_ERROR_SEMANTICS,
+  isKnownErrorCode,
+  type ReporterSink,
+  type TelemetryContext,
+  type TelemetryDecision,
+  type AppError,
+  type ErrorSemantics,
+} from "error-core";
 
 // P3c: the per-code client-details allowlist moved from the deleted `serialize-client`
 // (gateClientDetails/DETAILS_ALLOWLIST) to the decision-system SSOT `CANONICAL_ERROR_SEMANTICS`
 // (detailsExposure + detailsAllowlist). This local gate redacts the Sentry `details` context by
 // the SAME allowlist that gates the client payload — shallow-pick allowlisted keys, else undefined.
 const gateClientDetails = (code: string, details: unknown): unknown => {
-  const semantics = (CANONICAL_ERROR_SEMANTICS as Record<string, { detailsExposure: string; detailsAllowlist?: readonly string[] }>)[code];
-  const allowlist = semantics?.detailsExposure === "allowlist" ? semantics.detailsAllowlist : undefined;
+  if (!isKnownErrorCode(code)) return undefined;
+  const semantics: ErrorSemantics = CANONICAL_ERROR_SEMANTICS[code];
+  const allowlist = semantics.detailsExposure === "allowlist" ? semantics.detailsAllowlist : undefined;
   if (!allowlist?.length || typeof details !== "object" || details === null) return undefined;
   const source = details as Record<string, unknown>;
   const picked: Record<string, unknown> = {};
@@ -31,7 +35,7 @@ const gateClientDetails = (code: string, details: unknown): unknown => {
 
 // @sentry/nextjs v8 SeverityLevel is "fatal"|"error"|"warning"|"log"|"info"|"debug".
 // We only emit the four we use; the type is the real Sentry union so scope.setLevel matches.
-const toSentryLevel = (level: LogLevel): Sentry.SeverityLevel =>
+const toSentryLevel = (level: TelemetryDecision["level"]): Sentry.SeverityLevel =>
   level === "fatal"
     ? "fatal"
     : level === "warning"
@@ -119,10 +123,13 @@ export interface SentryReporterConfig {
   browserRefillPerSec?: number; // default 1
 }
 
-/** Reporter + the running throttle-drop total, so a `throttled{n}` aggregate can read it. */
-export interface SentryReporter extends Reporter {
+/** ReporterSink + the running throttle-drop total, so a `throttled{n}` aggregate can read it. */
+export interface SentryReporter extends ReporterSink {
   /** RUNNING total of browser-boundary events dropped by the storm throttle (G4/G5). */
   droppedTotal(): number;
+  /** Sentry-global user/context wiring (composition-root convenience — not part of ReporterSink). */
+  setUser(user: { id: string; role?: string } | null): void;
+  setContext(ctx: { correlationId?: string }): void;
 }
 
 export const createSentryReporter = (config: SentryReporterConfig = {}): SentryReporter => {
@@ -132,7 +139,7 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
   );
 
   return {
-    report(error: DomainError, level: LogLevel, ctx: TelemetryContext) {
+    capture(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext) {
       // (3) Storm vector: only window-boundary events (route tag set by §8.3) are bucketed.
       const fromBrowserBoundary =
         ctx.route === "window.onerror" || ctx.route === "window.onunhandledrejection";
@@ -145,12 +152,18 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
       // per event. tags/contexts/user/fingerprint live on the scope, NOT on a plain
       // options object — this is the v8 shape.
       Sentry.captureException(error, (scope) => {
-        scope.setLevel(toSentryLevel(level));
-        // (2) Stable grouping: one issue per error code, not per stack frame.
-        scope.setFingerprint([error.code]);
+        scope.setLevel(toSentryLevel(decision.level));
+        // (2) Stable grouping: the resolved decision fingerprint (operation·code·interaction),
+        // else one issue per error code — never per stack frame.
+        scope.setFingerprint([...(decision.fingerprint ?? [error.code])]);
         scope.setTags({
+          ...decision.tags,
           code: error.code,
-          expected: String(isExpectedCode(error.code as ErrorCode)),
+          // 구 isExpectedCode → catalog category(P5/P6): business = expected.
+          expected: String(
+            isKnownErrorCode(error.code) &&
+              CANONICAL_ERROR_SEMANTICS[error.code].category === "business",
+          ),
           runtime: ctx.runtime,
           ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {}),
         });
@@ -173,13 +186,14 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
     // (G5) T1 impact breadcrumb — NOT a re-capture. A breadcrumb attaches to the
     // NEXT captured event in this scope, stitching the user-visible impact to the
     // error via correlationId. category "error.presented" so it's filterable.
-    breadcrumb(error: DomainError, surface, ctx: TelemetryContext) {
+    // surface는 resolveTelemetry가 decision.tags.surface로 실어준다(ReporterSink 계약 불변).
+    breadcrumb(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext) {
       Sentry.addBreadcrumb({
         category: "error.presented",
         level: "info",
         data: {
           code: error.code,
-          surface,
+          surface: decision.tags?.surface ?? null,
           correlationId: ctx.correlationId ?? null,
         },
       });
