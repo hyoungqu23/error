@@ -1,8 +1,5 @@
-# CI 게이트 (RFC §8-3, P7).
-#
-# P8 전까지는 수렴이 완료된 패키지(error-core / error-adapters / error-next)만 게이트한다 —
-# apps/*(도그푸딩 마이그레이션)와 error-decision-system(패키지 은퇴)은 P8에서 편입/제거되며,
-# 그때 --filter를 제거해 워크스페이스 전체 게이트로 확장한다.
+# CI 게이트 (RFC §8-3, P7 도입 → P8에서 워크스페이스 전체로 확장).
+# 수렴(P0–P8) 완료 — 단일 시스템: error-core ← error-adapters ← error-next ← error-architecture.
 name: CI
 
 on:
@@ -21,5 +18,4 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # P8 TODO: apps 편입 시 --filter 제거 → 워크스페이스 전체 게이트.
-      - run: pnpm turbo run typecheck test lint --filter=error-core --filter=error-adapters --filter=error-next
+      - run: pnpm turbo run typecheck test lint
