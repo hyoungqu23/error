@@ -36,9 +36,21 @@ export {
 } from "./translator";
 
 // ── 텔레메트리 계약 + 단일 처리 경로 (컴포지션 루트/어댑터용) ───────────────
-// (TelemetryContext/ReporterSink/NotifierSink/TelemetryDecision 등은 `export * from "./decision"`로 노출)
+// (TelemetryContext/ReporterSink/NotifierSink/Presenter/TelemetryDecision 등은
+//  `export * from "./decision"`로 노출)
 export type { HandleErrorDeps } from "./types";
 export { createHandleError, type HandleErrorOptions } from "./handle-error";
+
+// ── 순수 리포터 어댑터 (벤더 SDK 없음) — dead-man's-switch (P6 재도입) ──────
+export {
+  guardedCompositeReporter,
+  compositeReporter,
+  noopReporter,
+  type GuardedCompositeReporter,
+  type ReporterHealth,
+  type LabeledReporter,
+  type CompositeReporterOptions,
+} from "./adapters/composite";
 
 // ── 정규화 + 헬퍼 ───────────────────────────────────────────────────────────
 export { normalizeToAppError } from "./normalize";
