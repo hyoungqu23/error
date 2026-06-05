@@ -162,3 +162,12 @@ export interface ReporterSink {
 export interface NotifierSink {
   alert(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext): void;
 }
+
+/**
+ * 신 모델의 3번째 sink 계약(RFC 모듈 맵) — 단 파이프라인(executeErrorDecision)은 호출하지
+ * 않는다: presentation은 소비자/UI의 몫이므로, caller가 반환받은 UserErrorDecision을
+ * presenter에 넘긴다. 벤더 어댑터(sonner 등)가 구현하는 표면 계약일 뿐이다. (P6)
+ */
+export interface Presenter {
+  present(error: AppError, user: UserErrorDecision, ctx: TelemetryContext): void;
+}
