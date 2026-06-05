@@ -1,13 +1,23 @@
 "use client";
 
 // app/demo/query-retry/page.tsx — 쿼리 트랙.
-// networkBoundary(throwing 변환)를 queryFn으로 쓰고, makeQueryClient가 깐 retryable 배선이
-// 재시도를 좌우한다. 실패한 DomainError는 useErrorHandler로 sink에 흘려 sonner 토스트를 띄운다.
+// networkBoundary(throwing 변환)를 queryFn으로 쓰고, makeQueryClient가 깐 catalog defaultRetryable
+// 배선이 재시도를 좌우한다. 실패한 AppError는 useErrorHandler(telemetry)로 흘리고, 반환된
+// decision.user를 presentFailure(컴포지션 루트의 sonner Presenter 배선)로 토스트한다 — 신 모델의
+// "telemetry는 파이프라인, presentation은 소비자" 시연.
 import { useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { networkBoundary, useErrorHandler, resolveErrorMessage, isDomainError } from "error-next";
+import {
+  networkBoundary,
+  useErrorHandler,
+  resolveErrorMessage,
+  isAppError,
+  isKnownErrorCode,
+  CANONICAL_ERROR_SEMANTICS,
+} from "error-next";
+import { presentFailure } from "@/lib/composition-root";
 
 const DocSchema = z.object({
   id: z.string(),
@@ -36,8 +46,13 @@ export default function QueryRetryDemo() {
   });
 
   const error = query.error;
-  const errorCode = isDomainError(error) ? error.code : undefined;
-  const errorMsg = isDomainError(error) ? resolveErrorMessage(error.userMessageKey) : undefined;
+  // isAppError가 null/비-AppError를 한 번에 거른다(narrow). 메시지는 catalog defaultMessageKey 해소.
+  const appErr = isAppError(error) ? error : undefined;
+  const errorCode = appErr?.code;
+  const errorMsg =
+    appErr && isKnownErrorCode(appErr.code)
+      ? resolveErrorMessage(CANONICAL_ERROR_SEMANTICS[appErr.code].defaultMessageKey)
+      : undefined;
 
   return (
     <div className="container">
@@ -85,14 +100,14 @@ export default function QueryRetryDemo() {
             <span className="badge err">{errorCode ?? "ERROR"}</span>
             <p style={{ marginTop: 12 }}>{errorMsg ?? "알 수 없는 오류"}</p>
             <p className="muted" style={{ fontSize: 12 }}>
-              correlationId: {isDomainError(error) ? (error.correlationId ?? "—") : "—"}
+              correlationId: {appErr?.correlationId ?? "—"}
             </p>
-            <button className="danger" onClick={() => handleError(error)}>
-              이 에러를 핸들러로 보내기 (sink → 토스트)
+            <button className="danger" onClick={() => presentFailure(handleError(error))}>
+              이 에러를 핸들러로 보내기 (telemetry → decision.user → 토스트)
             </button>
             <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              NOT_FOUND는 present:&quot;inline&quot; → 토스트가 뜨지 않는다. NETWORK/RATE/SERVER는
-              present:&quot;toast&quot;.
+              NOT_FOUND는 surface:&quot;inline&quot; → 토스트가 뜨지 않는다. NETWORK/RATE/SERVER는
+              surface:&quot;toast&quot;.
             </p>
           </div>
         )}

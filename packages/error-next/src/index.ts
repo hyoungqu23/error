@@ -9,6 +9,8 @@
 export * from "error-core";
 
 // 2) React/Next 클라이언트 통합.
+// 공유 baseline DecisionSystem — host가 자기 HandleErrorDeps를 조립할 때 주입한다(P8, D-P5-1 연장).
+export { errorSystem } from "./error-system";
 export { useErrorHandler } from "./use-error-handler";
 export {
   makeQueryClient,
