@@ -33,6 +33,11 @@ export interface FailureOptions {
   retryAfterMs?: number;
   userCanRetry?: boolean;
   occurrence?: Partial<OccurrenceContext>;
+  /**
+   * 5% telemetry escape hatch. tags/fingerprint를 override할 땐 PII 금지(불투명 식별자·고정
+   * 어휘만) — 커널 기본 산출은 고정 어휘이지만 override 값은 sink 마지막 방어선
+   * (sentryBeforeSend 스크럽)까지 그대로 흐른다. PR 리뷰 대상 (RFC §8-5).
+   */
   telemetry?: Partial<TelemetryDecision>;
 }
 

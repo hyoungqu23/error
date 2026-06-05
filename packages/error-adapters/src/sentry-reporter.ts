@@ -225,6 +225,10 @@ export const sentryBeforeSend = (event: Sentry.ErrorEvent): Sentry.ErrorEvent | 
   }
   if (event.extra) event.extra = scrubDeep(event.extra) as Record<string, unknown>;
   if (event.contexts) event.contexts = scrubDeep(event.contexts) as typeof event.contexts;
+  // P7(§8-5): tags/fingerprint도 마지막 방어선에 포함 — telemetry escape hatch(수동
+  // fingerprint/tags override)나 Reporter 우회 자동수집 이벤트로 새는 PII까지 닫는다.
+  if (event.tags) event.tags = scrubDeep(event.tags) as typeof event.tags;
+  if (event.fingerprint) event.fingerprint = event.fingerprint.map((f) => scrubString(String(f)));
   if (event.request?.headers) {
     for (const h of Object.keys(event.request.headers)) {
       if (PII_KEYS.has(h.toLowerCase())) event.request.headers[h] = "[redacted]";
