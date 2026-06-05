@@ -1,4 +1,6 @@
-// lib/composition-root.ts — 앱의 컴포지션 루트(DI 경계).
+"use client";
+
+// lib/composition-root.ts — 앱의 클라이언트 컴포지션 루트(DI 경계).
 //
 // "어떤 어댑터를 쓸지" 결정하는 유일한 장소다. 라이브러리(error-core/-adapters/-next)는
 // 계약(ReporterSink/Presenter/NotifierSink)만 알고, 구체 벤더 선택은 여기서 한다.
@@ -9,7 +11,8 @@
 //   - 토스트(Presenter): 신 모델에서 Presenter는 파이프라인이 호출하지 않는 **소비자 계약**이다 —
 //                       handleError가 반환한 decision.user를 presentFailure()로 sonner presenter에
 //                       넘긴다(아래). "telemetry는 파이프라인, presentation은 소비자"의 레퍼런스 배선.
-//   - 서버 deps       : error-next/server의 serverDeps를 그대로 사용한다(guarded console
+//   - 서버 deps       : 이 파일을 거치지 않는다 — error-next/server의 serverDeps를 직접
+//                       import해 사용한다(guarded console
 //                       reporter + health(), pager notifier, 요청별 correlationId). 프로덕션에서
 //                       Sentry를 쓰려면 instrumentation.ts에서 Sentry.init({ beforeSend:
 //                       sentryBeforeSend })를 호출하고 createSentryReporter()를 guarded

@@ -13,7 +13,7 @@ const demos = [
     href: "/demo/query-retry",
     title: "쿼리 트랙 · networkBoundary + TanStack",
     badge: "Client Query",
-    desc: "networkBoundary가 raw transport를 DomainError로 변환(8개 코드의 유일 생산자). makeQueryClient가 retryable 플래그를 배선 → 404는 재시도 안 하고, 429/5xx는 Retry-After/백오프로 재시도. 실패는 sonner 토스트로.",
+    desc: "networkBoundary가 raw transport를 AppError로 변환(8개 코드의 유일 생산자). makeQueryClient가 catalog defaultRetryable을 배선 → 404는 재시도 안 하고, 429/5xx는 Retry-After/백오프로 재시도. 실패는 handleError → decision.user → Presenter 토스트.",
   },
   {
     href: "/demo/boundaries",
@@ -54,7 +54,7 @@ error-next      Next/React 통합 (peerDeps: next, react, @tanstack)
   · 서버 표면: import { … } from "error-next/server"`}</pre>
         <p className="muted">
           소비자가 보는 공개 표면은 단 2개(클라이언트 배럴 + 서버 배럴). 나머지는 내부 구현이며
-          deep import(<code>error-core/app-error</code> 등)도 가능하다.
+          deep import(<code>error-core/decision/app-error</code> 등)도 가능하다.
         </p>
       </div>
 

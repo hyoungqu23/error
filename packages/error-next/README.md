@@ -10,19 +10,19 @@
 ## 표면
 
 ### `error-next` (클라이언트)
-- `useErrorHandler` — 인터랙션 경계 훅(redirect/page 에스컬레이션 + returnTo).
-- `makeQueryClient` / `shouldRetryQuery` — TanStack QueryClient 기본(`retryable` 배선).
+- `useErrorHandler` — 인터랙션 경계 훅(redirect/login·page 에스컬레이션 + returnTo).
+- `makeQueryClient` / `shouldRetryQuery` — TanStack QueryClient 기본(catalog `defaultRetryable` 배선).
 - `ErrorFallback` — 공유 렌더링 경계 UI(`unstable_retry` ?? `reset` ?? reload).
-- `ErrorHandlerInit` — 클라 싱글턴 sink 부트스트랩(no-op deps 기본).
-- `ErrorRegistryProvider` / `useErrorRegistry`.
-- (+ `error-core`의 `makeError`, `Result`, `resolveErrorMessage`, `handleError`, `isDomainError`, `fieldErrorsFromError` …)
+- `ErrorHandlerInit` — 클라 싱글턴 sink 부트스트랩(no-op sink 기본).
+- `errorSystem` — 공유 baseline DecisionSystem(host가 자기 `HandleErrorDeps`를 조립할 때 주입).
+- (+ `error-core`의 `makeError`, `Result`/`degrade`, `resolveErrorMessage`, `handleError`, `isAppError`, `CANONICAL_ERROR_SEMANTICS`, `fieldErrorsFromError` …)
 
 ### `error-next/server` (서버 전용)
 - `safeServerAction` / `safeFormAction` — 뮤테이션/폼 경계(Track-1 Result / Track-2 report+rethrow).
 - `raise` — 쿼리 expected 에러 → Next 인터럽트(notFound/redirect/forbidden).
-- `getRequestHandler` / `getRequestCorrelationId` / `serverDeps` / `serverReporter` — 요청별 컴포지션 루트.
-- `toErrorResponse` — AppError → HTTP 응답.
-- `withRetry` — 서버측 재시도.
+- `getRequestHandler` / `getRequestCorrelationId` / `serverDeps` / `serverReporter` — 요청별 컴포지션 루트(+`health()` dead-man's-switch 프로브).
+- `errorResponder` — `errorSystem`에 바인딩된 `createErrorResponder` — 캐치값 → HTTP Response(단일 outbound 누출게이트).
+- `withRetry` — 서버측 재시도(catalog `defaultRetryable` + Retry-After 힌트).
 
 ## peerDependencies
 

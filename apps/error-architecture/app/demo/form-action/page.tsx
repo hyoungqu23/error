@@ -1,9 +1,10 @@
 "use client";
 
 // app/demo/form-action/page.tsx — useActionState로 safeFormAction을 구동하는 폼.
-// Result.Failure는 클라이언트로 건너온 ClientSerializedError를 담는다(free-text message 없음):
-//   · code==="VALIDATION" → details.fieldErrors가 허용목록을 통과해 인라인 렌더
-//   · 그 외(INVALID_CREDENTIALS 등) → userMessageKey를 resolveErrorMessage로 카피 해소
+// Result.Failure는 누출게이트(toClientErrorPayload)를 통과해 건너온 ClientErrorPayload를 담는다
+// (free-text message 없음):
+//   · code==="VALIDATION" → details.fieldErrors가 allowlist를 통과해 인라인 렌더
+//   · 그 외(INVALID_CREDENTIALS 등) → messageKey(+messageVars)를 resolveErrorMessage로 카피 해소
 import { useActionState } from "react";
 import Link from "next/link";
 import { resolveErrorMessage } from "error-next";
@@ -78,7 +79,7 @@ export default function FormActionDemo() {
         <ul className="muted">
           <li>Zod 파싱은 safeFormAction이 소유 → 실패 시 VALIDATION + fieldErrors</li>
           <li>비즈니스 에러는 throw해도 Track-1으로 Result.Failure가 됨(error.tsx로 안 감)</li>
-          <li>클라이언트는 code/userMessageKey/허용된 details만 받음 — message 누출 없음</li>
+          <li>클라이언트는 code/messageKey/허용된 details만 받음 — message 누출 없음</li>
         </ul>
       </div>
     </div>

@@ -1,5 +1,7 @@
 # Handoff — error-system 수렴(convergence) 작업
 
+> **[수렴 종결 — 2026-06-05]** 아래 본문은 P3c 완료 시점(2026-06-02)의 사료다. 이후 **P3e·P5·P6·P7·P8이 전부 완료되어 수렴이 종결**됐다 — 워크스페이스 전체 `pnpm turbo run typecheck test lint` 11/11 green(core 296 · adapters 21 · next 37 · 앱 typecheck+lint). 단일 시스템: `error-core ← error-adapters ← error-next ← apps/error-architecture`. `error-decision-system`+데모 앱은 은퇴(삭제). phase별 계획·리뷰 기록은 `docs/superpowers/plans/`.
+
 ## 한 줄 요약
 구 에러 스택(`error-core`/`error-adapters`/`error-next` — 메커니즘 강·정책 약)과 신 `error-decision-system`(정책 강·메커니즘 없음, demo)을 **수렴**(deprecate 아님): 신 시스템의 결정 엔진을 구 `error-core`에 이식해 단일 통합 시스템으로 만드는 중. 8-Phase 중 P0–P3c 완료, P3e부터 재개 대기.
 

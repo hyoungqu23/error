@@ -102,12 +102,23 @@ export default function QueryRetryDemo() {
             <p className="muted" style={{ fontSize: 12 }}>
               correlationId: {appErr?.correlationId ?? "—"}
             </p>
-            <button className="danger" onClick={() => presentFailure(handleError(error))}>
+            <button
+              className="danger"
+              onClick={() =>
+                // 이 버튼은 페이지 전환이 아니라 인라인 위젯의 에러 — occurrence를 component
+                // scope로 명시해야 resolve가 page 에스컬레이션 대신 toast/inline을 고른다.
+                presentFailure(
+                  handleError(error, {
+                    occurrence: { interaction: "query", uiScope: "component" },
+                  }),
+                )
+              }
+            >
               이 에러를 핸들러로 보내기 (telemetry → decision.user → 토스트)
             </button>
             <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              NOT_FOUND는 surface:&quot;inline&quot; → 토스트가 뜨지 않는다. NETWORK/RATE/SERVER는
-              surface:&quot;toast&quot;.
+              NOT_FOUND(business)·HTTP_SERVER_ERROR(fault)는 surface:&quot;inline&quot; → 토스트가
+              뜨지 않는다. NETWORK/RATE_LIMITED(operational·retryable)는 surface:&quot;toast&quot;.
             </p>
           </div>
         )}

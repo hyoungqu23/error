@@ -35,7 +35,7 @@ error-core  ◄──  error-adapters  ◄──  error-next  ◄──  apps/er
 | 결정 | 이유 |
 |---|---|
 | **raw-TS 내부 패키지(빌드 단계 없음)** | 패키지는 `.ts` 소스를 그대로 export(`exports` 맵). 앱 번들러가 `transpilePackages`로 트랜스파일. 빌드/watch 오케스트레이션 불필요. |
-| **공개 표면 2개 유지** | 소비자는 클라이언트 배럴(`error-next`)·서버 배럴(`error-next/server`)만 본다. 내부 모듈은 deep import(`error-core/app-error`)도 가능. |
+| **공개 표면 2개 유지** | 소비자는 클라이언트 배럴(`error-next`)·서버 배럴(`error-next/server`)만 본다. 내부 모듈은 deep import(`error-core/decision/app-error`)도 가능. |
 | **server-only 누출 방지** | 클라이언트 배럴의 전이 import 폐포에 `"server-only"` 모듈이 하나도 없다. 잘못된 클라 import는 런타임 누출이 아니라 **빌드 에러**가 된다. |
 | **벤더 버전 핀 유지** | 커널/어댑터는 검증된 baseline(zod 3 · @sentry 8 · sonner 1 · TanStack 5 · vitest 2)을 그대로 써 354개 테스트를 보존. **앱만** Next 16 · React 19.2. peer 범위가 둘 다 커버. |
 | **가드레일(RFC §8)** | ESLint flat-config가 벤더 격리(동적 import 포함)·`error.message` 직접 렌더 금지를 강제하고, `pii-invariants`가 커널 산출물의 PII-금지를 고정. CI는 워크스페이스 전체 typecheck+test+lint 게이트. |
@@ -62,6 +62,7 @@ pnpm --filter error-architecture-app dev
 
 - **`/demo/form-action`** — `safeFormAction` + `useActionState`. Zod 검증 실패는 VALIDATION 인라인 필드 에러, 비즈니스 에러는 직렬화 안전 `Result.Failure`.
 - **`/demo/query-retry`** — `networkBoundary` + TanStack Query. catalog `defaultRetryable` 배선으로 404는 무재시도, 429/5xx는 Retry-After/백오프 재시도. 실패는 `handleError`(telemetry) 후 반환된 `decision.user`를 Presenter로 — "telemetry는 파이프라인, presentation은 소비자" 시연.
+- **`/demo/server-retry`** — `withRetry` 서버측 DAL 재시도. catalog `defaultRetryable`과 RATE_LIMITED Retry-After 힌트를 존중해 운영성 에러만 풀-지터 백오프로 재시도.
 - **`/demo/boundaries`** — `raise()`가 expected 에러를 Next 인터럽트로 변환(NOT_FOUND→`notFound()`, FORBIDDEN→`forbidden()`), unexpected fault는 `error.tsx`.
 - **`/api/health`** — 텔레메트리 dead-man's-switch 헬스 프로브.
 - **`proxy.ts`** — 모든 요청에 `x-request-id` 상관관계 ID를 심어 응답 헤더·쿠키로 클라이언트까지 전파.
