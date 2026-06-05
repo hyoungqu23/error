@@ -1,3 +1,5 @@
+> **[HISTORICAL — 수렴(P0–P8) 이전 사료]** 이 문서가 기술하는 `packages/error-decision-system`과 데모 앱(`apps/error-decision-next`/`apps/error-decision-vite`)은 P8에서 은퇴(삭제)됐다. 결정 엔진·카탈로그·AppError는 `packages/error-core`(decision 모델)로 이식 완료. 현행 SSOT: 루트 [`README.md`](./README.md) + [`packages/error-core/ARCHITECTURE.md`](./packages/error-core/ARCHITECTURE.md). 본문은 사료적 맥락으로 읽을 것.
+
 # NEW_DX: Developer Experience for Error Decision Architecture
 
 이 문서는 `NEW.md`의 에러 결정 아키텍처를 개발자가 실제로 매일 사용할 수 있는 형태로 낮추는 방법을 다룬다.

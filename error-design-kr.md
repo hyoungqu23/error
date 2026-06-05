@@ -1,3 +1,5 @@
+> **[HISTORICAL — 수렴(P0–P8) 이전 사료]** 이 문서가 기술하는 `packages/error-decision-system`과 데모 앱(`apps/error-decision-next`/`apps/error-decision-vite`)은 P8에서 은퇴(삭제)됐다. 결정 엔진·카탈로그·AppError는 `packages/error-core`(decision 모델)로 이식 완료. 현행 SSOT: 루트 [`README.md`](./README.md) + [`packages/error-core/ARCHITECTURE.md`](./packages/error-core/ARCHITECTURE.md). 본문은 사료적 맥락으로 읽을 것.
+
 # Next.js(App Router) + TypeScript를 위한 통합 에러 시스템
 
 > 프로젝트 비종속적 설계. 원본 시리즈 고유의 어휘 — `ERROR_REGISTRY`, `DomainError`/`makeError`, 투 트랙(two-track) `Result` 전략, 단일 `handleError`/`handleServerError` 처리기, Reporter/Presenter 주입(DI), 그리고 여섯 개의 경계(boundaries) — 를 존중하며, 이를 Next.js v16.2.x App Router 메커니즘과 재조정한다. 시리즈와 프레임워크가 충돌하는 지점에서는 이를 표시하고 한쪽 편을 택한다.

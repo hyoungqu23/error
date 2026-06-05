@@ -50,8 +50,8 @@ export default function ServerRetryDemo() {
       <div className="card">
         <h3 className="muted" style={{ marginTop: 0 }}>이 데모가 보여주는 것</h3>
         <ul className="muted">
-          <li>withRetry는 DomainError.retryable(레지스트리 SSOT)을 존중 — 재시도 가능한 코드만 재시도</li>
-          <li>NOT_FOUND/VALIDATION 같은 non-retryable 코드와 non-DomainError는 즉시 전파</li>
+          <li>withRetry는 catalog defaultRetryable(카탈로그 SSOT)을 존중 — 재시도 가능한 코드만 재시도</li>
+          <li>NOT_FOUND/VALIDATION 같은 non-retryable 코드와 non-AppError는 즉시 전파</li>
           <li>RATE_LIMITED의 Retry-After 힌트가 있으면 백오프 대신 그 값을 사용(maxMs로 클램프)</li>
         </ul>
       </div>
