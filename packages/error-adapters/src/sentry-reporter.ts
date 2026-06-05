@@ -153,10 +153,14 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
       // options object — this is the v8 shape.
       Sentry.captureException(error, (scope) => {
         scope.setLevel(toSentryLevel(decision.level));
-        // (2) Stable grouping: the resolved decision fingerprint (operation·code·interaction),
-        // else one issue per error code — never per stack frame.
+        // (2) Stable grouping: the resolved decision fingerprint [operation, code, interaction]
+        // (D-P6-3 — 의도적으로 구 per-code보다 세분화된 그룹핑; resolveTelemetry가 항상 채우므로
+        // [error.code] 폴백은 hand-built decision에만 적용된다). Never per stack frame.
         scope.setFingerprint([...(decision.fingerprint ?? [error.code])]);
         scope.setTags({
+          // D-P6-3: decision.tags(operation/criticality/surface)를 의도적으로 전송 — 운영 분류
+          // 축이 Sentry 검색/대시보드에 필요. 예약 키(code/expected/runtime/correlationId)는
+          // 아래 명시 값이 항상 이긴다(스프레드보다 뒤).
           ...decision.tags,
           code: error.code,
           // 구 isExpectedCode → catalog category(P5/P6): business = expected.
