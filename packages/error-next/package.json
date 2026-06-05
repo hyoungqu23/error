@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf .turbo node_modules"
+    "clean": "rm -rf .turbo node_modules",
+    "lint": "eslint ."
   },
   "dependencies": {
     "error-adapters": "workspace:*",
@@ -31,7 +32,9 @@
     "react-dom": ">=19.0.0"
   },
   "peerDependenciesMeta": {
-    "@sentry/nextjs": { "optional": true }
+    "@sentry/nextjs": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@sentry/nextjs": "^8.50.0",
