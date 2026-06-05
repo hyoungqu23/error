@@ -69,5 +69,5 @@ pnpm --filter error-architecture-app dev
 
 ## 요구사항
 
-- Node.js ≥ 20.9
+- Node.js ≥ 22.13 (pnpm 11의 요구)
 - pnpm ≥ 11
