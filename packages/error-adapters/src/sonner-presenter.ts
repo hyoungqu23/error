@@ -1,43 +1,35 @@
 // error/adapters/sonner-presenter.ts  — the ONLY file that imports the sonner SDK.
-// (design §5 — Presenter sink) Client-only UX sink: turns a DomainError into a toast.
+// (P6 — 신 Presenter 계약, design §5 / RFC 모듈 맵) Client-only UX sink: caller가
+// executeErrorDecision의 반환값(UserErrorDecision)을 건네면 toast로 렌더한다.
+// 파이프라인은 Presenter를 호출하지 않는다 — presentation은 소비자/UI의 몫이고,
+// 이 파일은 그 소비자가 쓰는 벤더 어댑터다.
 //
-// Copy is resolved through resolveErrorMessage (host translator → co-located fallback →
-// generic line), so the Presenter never renders a raw i18n key. RATE_LIMITED interpolates
-// a `{seconds}` countdown from its public retryAfterMs detail (G2 / G6).
+// Copy는 user.messageKey(disclosure가 반영된 키)를 resolveErrorMessage로 해소
+// (host translator → co-located fallback → generic line) — 절대 raw 키를 렌더하지 않는다.
+// RATE_LIMITED의 {seconds} 카운트다운(G2/G6): user.messageVars가 오면 그대로 쓰고,
+// 없으면 retryAfterMs(decision의 user.retryAfterMs 우선, error의 힌트 fallback)에서
+// 도출한다 — resolve가 아직 messageVars를 생성하지 않으므로 sink에서 보존(§5.4).
 //
-// Dedupe: the toast `id` is the error.code, so a storm of the same code collapses into a
-// single, updating toast instead of stacking. Only "toast"/"alert" are meaningful here;
-// the handleError pipeline already filters non-Presenter surfaces, but we defend anyway.
+// Dedupe: toast id = error.code — 같은 코드의 폭풍이 한 개의 갱신 토스트로 수렴.
 import { toast } from "sonner";
-import type { Presenter } from "error-core/telemetry";
-import { isDomainError, type DomainError } from "error-core/app-error";
+import { retryAfterHintFromError, type Presenter } from "error-core";
 import { resolveErrorMessage, type Translator } from "error-core/translator";
 
-/**
- * Read the public Retry-After value (ms) off a RATE_LIMITED error without an `any` cast.
- * `error.details` on a generic DomainError is the full ErrorDetailsMap union (incl. null),
- * so `.retryAfterMs` is not reachable directly. The isDomainError(e, code) guard narrows
- * the WHOLE instance to DomainError<"RATE_LIMITED">, collapsing details to
- * `{ retryAfterMs?: number } | null` — strict + noUncheckedIndexedAccess clean.
- */
-const retryAfterMsOf = (error: DomainError): number | undefined => {
-  if (!isDomainError(error, "RATE_LIMITED")) return undefined;
-  return error.details?.retryAfterMs;
-};
-
 export const createSonnerPresenter = (translator?: Translator | null): Presenter => ({
-  present(error, action) {
-    // Defensive: only toast/alert reach a user-facing toast surface.
-    if (action !== "toast" && action !== "alert") return;
+  present(error, user) {
+    // Defensive: only toast/dialog reach a user-facing toast surface
+    // (구 "toast"/"alert" — 신 ErrorSurface 어휘에서 alert는 dialog).
+    if (user.surface !== "toast" && user.surface !== "dialog") return;
 
-    const retryAfterMs = retryAfterMsOf(error);
+    const retryAfterMs = user.retryAfterMs ?? retryAfterHintFromError(error);
     const vars =
-      retryAfterMs !== undefined ? { seconds: Math.ceil(retryAfterMs / 1000) } : undefined;
-    const message = resolveErrorMessage(error.userMessageKey, translator, vars);
+      user.messageVars ??
+      (retryAfterMs !== undefined ? { seconds: Math.ceil(retryAfterMs / 1000) } : undefined);
+    const message = resolveErrorMessage(user.messageKey, translator, vars);
 
     // Dedupe by code: one toast per code, updated in place on repeats.
     const options = { id: error.code } as const;
-    if (action === "alert") toast.error(message, options);
+    if (user.surface === "dialog") toast.error(message, options);
     else toast(message, options);
   },
 });
