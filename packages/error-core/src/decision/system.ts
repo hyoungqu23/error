@@ -254,6 +254,10 @@ export const createDecisionSystem = <
 
   // The degrade point: thread correlationId/digest off the AppError, run the SINGLE allowlist
   // gated by detailsExposure==='allowlist' (shallow per D7), and never copy surface/target.
+  //
+  // CONTRACT: finalize-후 전용. 이 함수 자체는 codeKnown/validateDetails 강등을 하지 않는다 —
+  // 그 게이트는 finalizeAppError가 소유하며, wire로 가는 모든 경로는 finalizeFailure/finalizeUnknown을
+  // 거쳐야 한다. 카탈로그 밖 raw AppError를 직접 건네면 그 code 문자열이 payload에 실린다.
   const toClientErrorPayload = (error: AppError, decision: ErrorDecision): ClientErrorPayload => {
     const semantics = lookupSemantics(error.code);
     const details =
