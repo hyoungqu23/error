@@ -89,6 +89,17 @@ describe("guardedCompositeReporter (dead-man's-switch / health accounting)", () 
     expect(healthy.capture).toHaveBeenCalledTimes(1);
   });
 
+  it("a throwing breadcrumb() sink does NOT prevent the other sink's breadcrumb (guarded)", () => {
+    const healthy = makeSink();
+    const guarded = guardedCompositeReporter([
+      { label: "down", reporter: throwingSink() },
+      { label: "up", reporter: healthy.sink },
+    ]);
+
+    guarded.breadcrumb(ERR, DECISION, CTX);
+    expect(healthy.breadcrumb).toHaveBeenCalledTimes(1);
+  });
+
   it("increments the per-sink failure counter when an adapter throws", () => {
     const guarded = guardedCompositeReporter([{ label: "down", reporter: throwingSink() }]);
 
