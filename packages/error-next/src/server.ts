@@ -9,6 +9,13 @@ import "server-only";
 export { safeServerAction } from "./safe-server-action";
 export { safeFormAction, type FormState } from "./safe-form-action";
 
+// safeFormAction의 validator-agnostic 검증 계약 — zod는 zodFormValidator로 흡수되는 기본값일 뿐.
+export {
+  zodFormValidator,
+  type FormValidator,
+  type FormValidationResult,
+} from "./form-validator";
+
 // 쿼리 → 프레임워크 인터럽트 다리(notFound/redirect/forbidden).
 export { raise } from "./raise";
 
