@@ -21,9 +21,14 @@ vi.mock("@sentry/nextjs", () => ({
   setTag: vi.fn(),
 }));
 
-import { createSentryReporter, sentryBeforeSend } from "@/error/adapters/sentry-reporter";
+import {
+  createSentryReporter,
+  sentryBeforeSend,
+  composeBeforeSend,
+} from "@/error/adapters/sentry-reporter";
 import { makeError } from "@/error/make-error";
 import { appError } from "@/error/decision/app-error";
+import { markPipelineCaptured } from "@/error/pipeline-captured";
 import type { TelemetryContext, TelemetryDecision } from "@/error/index";
 
 const CTX: TelemetryContext = {
@@ -209,5 +214,87 @@ describe("createSentryReporter (P6 ReporterSink wiring)", () => {
       (addBreadcrumb.mock.calls[i]![0] as { data: Record<string, unknown> }).data;
     expect(dataOf(0)).toMatchObject({ code: "OFFLINE", surface: "toast", correlationId: "c1" });
     expect(dataOf(1)).toMatchObject({ code: "OFFLINE", surface: null });
+  });
+});
+
+// ── 0b — composeBeforeSend(이식 설계 §PR2a) 합성 순서/단락/스크럽 특성화 ─────────────────
+describe("composeBeforeSend", () => {
+  // Sentry EventHint(originalException만 사용)의 최소 형태.
+  const hintFor = (originalException: unknown) =>
+    ({ originalException }) as unknown as Parameters<ReturnType<typeof composeBeforeSend>>[1];
+  const eventFor = (over: Record<string, unknown> = {}) =>
+    ({ ...over }) as unknown as Parameters<ReturnType<typeof composeBeforeSend>>[0];
+
+  it("(a) drops the AUTO-capture copy (no errsys.source tag) of a marked error", () => {
+    const original = new Error("boom");
+    markPipelineCaptured(original);
+
+    const out = composeBeforeSend()(eventFor({ tags: { code: "X" } }), hintFor(original));
+
+    expect(out).toBeNull();
+  });
+
+  it("(b) passes + scrubs a marked error's PIPELINE copy (errsys.source === 'pipeline')", () => {
+    const original = new Error("boom");
+    markPipelineCaptured(original);
+
+    const out = composeBeforeSend()(
+      eventFor({ tags: { "errsys.source": "pipeline" }, message: "Bearer abc.def.ghi" }),
+      hintFor(original),
+    ) as ReturnType<typeof sentryBeforeSend>;
+
+    expect(out).not.toBeNull();
+    // ③ 스크럽이 적용된 채로 통과한다.
+    expect(out?.message).toBe("[redacted-token]");
+  });
+
+  it("(c) passes an UNMARKED error (errors outside the pipeline are preserved)", () => {
+    const original = new Error("outside the pipeline");
+
+    const out = composeBeforeSend()(eventFor({ message: "hi" }), hintFor(original));
+
+    expect(out).not.toBeNull();
+    expect((out as ReturnType<typeof sentryBeforeSend>)?.message).toBe("hi");
+  });
+
+  it("(d) short-circuits when the existing beforeSend returns null (no scrub — null)", () => {
+    const dropAll = vi.fn(() => null);
+
+    const out = composeBeforeSend(dropAll)(
+      eventFor({ message: "Bearer abc.def.ghi" }),
+      hintFor(new Error("x")),
+    );
+
+    expect(out).toBeNull();
+    expect(dropAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("(e) awaits an async existing (Promise) then applies the scrub", async () => {
+    // existing이 PromiseLike를 반환하면 then으로 ③을 이어 붙인다.
+    const asyncExisting = vi.fn((event: { message?: string }) =>
+      Promise.resolve(event as Parameters<typeof sentryBeforeSend>[0]),
+    );
+
+    const out = await composeBeforeSend(asyncExisting)(
+      eventFor({ message: "Bearer abc.def.ghi" }),
+      hintFor(new Error("x")),
+    );
+
+    expect(out).not.toBeNull();
+    expect(out?.message).toBe("[redacted-token]");
+  });
+
+  it("(f) actually applies the scrub (email/token removed) on the pass-through path", () => {
+    const out = composeBeforeSend()(
+      eventFor({
+        user: { id: "u1", email: "user@example.com" },
+        extra: { authorization: "Bearer abc.def.ghi" },
+      }),
+      hintFor(new Error("x")),
+    ) as ReturnType<typeof sentryBeforeSend>;
+
+    expect(out).not.toBeNull();
+    expect(out?.user).toEqual({ id: "u1" }); // email dropped
+    expect(out?.extra?.authorization).toBe("[redacted]");
   });
 });

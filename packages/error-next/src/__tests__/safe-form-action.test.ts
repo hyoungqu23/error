@@ -49,6 +49,7 @@ vi.mock("next/navigation", () => ({
 import { safeFormAction } from "@/error/safe-form-action";
 import { safeServerAction } from "@/error/safe-server-action";
 import type { FormState } from "@/error/safe-form-action";
+import type { FormValidator } from "../form-validator";
 import { makeError } from "@/error/make-error";
 import type { Result } from "@/error/result";
 
@@ -238,5 +239,124 @@ describe("safeServerAction — RPC-style sibling shares the same Result plumbing
     });
     await expect(redirectAction({ id: "x", count: 1 } as In)).rejects.toBe(redirect);
     expect(handleServerError).not.toHaveBeenCalled();
+  });
+});
+
+describe("safeFormAction — validator-agnostic (custom FormValidator)", () => {
+  it("(a) custom validator ok → Success carrying the action's return; action sees parsed data", async () => {
+    const seen: { name: string }[] = [];
+    // zod에 의존하지 않는 순수 FormValidator — input(unknown)을 직접 좁혀 {name}으로 정규화한다.
+    const validator: FormValidator<{ name: string }> = {
+      parse: (input) => {
+        const obj = input as Record<string, unknown>;
+        return { ok: true, data: { name: String(obj.name ?? "") } };
+      },
+    };
+    const action = safeFormAction(validator, async (data) => {
+      seen.push(data);
+      return { greeting: `hi ${data.name}` };
+    });
+
+    const result = await action(null, fd({ name: "ada" }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected Success");
+    expect(result.data).toEqual({ greeting: "hi ada" });
+    expect(seen).toEqual([{ name: "ada" }]);
+    expect(handleServerError).not.toHaveBeenCalled();
+  });
+
+  it("(b) custom validator fieldErrors + formError → VALIDATION Failure with _form joined into fieldErrors", async () => {
+    const validator: FormValidator<{ name: string }> = {
+      parse: () => ({
+        ok: false,
+        fieldErrors: { name: ["required"] },
+        formError: "form is invalid",
+      }),
+    };
+    const action = safeFormAction(validator, async (data) => ({ name: data.name }));
+
+    const result = await action(null, fd({ name: "" }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected Failure");
+    expect(result.error.code).toBe("VALIDATION");
+    const details = result.error.details as { fieldErrors: Record<string, string[]> };
+    expect(details.fieldErrors.name).toEqual(["required"]);
+    // formError는 fieldErrors의 예약 키 _form으로 합류해 allowlist/validateDetails를 통과한다.
+    expect(details.fieldErrors._form).toEqual(["form is invalid"]);
+    expect(handleServerError).not.toHaveBeenCalled();
+  });
+
+  it("(c) custom validator throwing → reports via getRequestHandler then re-throws (unexpected path)", async () => {
+    const boom = new Error("validator exploded");
+    const validator: FormValidator<{ name: string }> = {
+      parse: () => {
+        throw boom;
+      },
+    };
+    const action = safeFormAction(validator, async (data) => ({ name: data.name }));
+
+    await expect(action(null, fd({ name: "x" }))).rejects.toBe(boom);
+    expect(handleServerError).toHaveBeenCalledTimes(1);
+    expect(handleServerError).toHaveBeenCalledWith(boom);
+  });
+
+  // P0a 리뷰 봉인: zod 오버로드 경로의 **의도된 동작 변경** — 이전엔 flatten().formErrors(루트/
+  // refine 오류)가 조용히 버려졌으나, 이제 zodFormValidator를 경유하며 _form으로 wire에 실린다.
+  it("(d) zod root-level refine error → details.fieldErrors._form (intended behavior change, sealed)", async () => {
+    const refined = z
+      .object({ a: z.string(), b: z.string() })
+      .refine((v) => v.a !== v.b, { message: "a와 b는 달라야 합니다" });
+    const action = safeFormAction(refined, async (data) => ({ a: data.a }));
+
+    const result = await action(null, fd({ a: "same", b: "same" }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected Failure");
+    expect(result.error.code).toBe("VALIDATION");
+    const details = result.error.details as { fieldErrors: Record<string, string[]> };
+    expect(details.fieldErrors._form).toEqual(["a와 b는 달라야 합니다"]);
+  });
+});
+
+describe("safeServerAction — validator-agnostic (P0a 리뷰: 두 경계의 wire shape 통일)", () => {
+  it("custom FormValidator ok → Success; fieldErrors+formError → VALIDATION Failure with _form", async () => {
+    const validator: FormValidator<{ n: number }> = {
+      parse: (input) => {
+        const obj = input as Record<string, unknown>;
+        return typeof obj.n === "number"
+          ? { ok: true, data: { n: obj.n } }
+          : { ok: false, fieldErrors: { n: ["number required"] }, formError: "bad payload" };
+      },
+    };
+    const action = safeServerAction(validator, async (data) => ({ doubled: data.n * 2 }));
+
+    const good = await action({ n: 21 });
+    expect(good.ok).toBe(true);
+    if (!good.ok) throw new Error("expected Success");
+    expect(good.data).toEqual({ doubled: 42 });
+
+    const bad = await action({ n: "no" });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) throw new Error("expected Failure");
+    expect(bad.error.code).toBe("VALIDATION");
+    const details = bad.error.details as { fieldErrors: Record<string, string[]> };
+    expect(details.fieldErrors.n).toEqual(["number required"]);
+    expect(details.fieldErrors._form).toEqual(["bad payload"]);
+    expect(handleServerError).not.toHaveBeenCalled();
+  });
+
+  it("zod root-level refine error → _form (same wire shape as safeFormAction)", async () => {
+    const refined = z
+      .object({ a: z.string(), b: z.string() })
+      .refine((v) => v.a !== v.b, { message: "a/b 충돌" });
+    const action = safeServerAction(refined, async (data) => ({ a: data.a }));
+
+    const r = await action({ a: "x", b: "x" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected Failure");
+    const details = r.error.details as { fieldErrors: Record<string, string[]> };
+    expect(details.fieldErrors._form).toEqual(["a/b 충돌"]);
   });
 });

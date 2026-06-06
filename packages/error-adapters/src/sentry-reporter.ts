@@ -9,6 +9,7 @@ import * as Sentry from "@sentry/nextjs";
 import {
   CANONICAL_ERROR_SEMANTICS,
   isKnownErrorCode,
+  isPipelineCaptured,
   pickAllowlistedDetails,
   type ReporterSink,
   type TelemetryContext,
@@ -158,6 +159,9 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
           // 축이 Sentry 검색/대시보드에 필요. 예약 키(code/expected/runtime/correlationId)는
           // 아래 명시 값이 항상 이긴다(스프레드보다 뒤).
           ...decision.tags,
+          // 파이프라인본 식별 — composeBeforeSend가 이 태그로 파이프라인본을 살리고(통과),
+          // 같은 원본 에러의 "자동 캡처본"(이 태그 없음)을 드롭한다.
+          "errsys.source": "pipeline",
           code: error.code,
           // 구 isExpectedCode → catalog category(P5/P6): business = expected.
           expected: String(
@@ -237,3 +241,54 @@ export const sentryBeforeSend = (event: Sentry.ErrorEvent): Sentry.ErrorEvent | 
   }
   return event;
 };
+
+/** Sentry beforeSend의 사용자 정의 타입(동기 또는 PromiseLike, null로 드롭 가능). */
+type BeforeSend = (
+  event: Sentry.ErrorEvent,
+  hint: Sentry.EventHint,
+) => Sentry.ErrorEvent | PromiseLike<Sentry.ErrorEvent | null> | null;
+
+/** 값이 PromiseLike(then 보유)인지 — 동기 경로를 동기로 유지하기 위한 좁힘. */
+const isPromiseLike = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
+  v != null && typeof (v as { then?: unknown }).then === "function";
+
+/**
+ * 합성 beforeSend(이식 설계 §PR2a) — 순서가 계약이다:
+ * ① 파이프라인이 소유한(마커) 에러의 자동 캡처본 드롭(errsys.source !== "pipeline")
+ * ② 대상의 기존 beforeSend(null 반환 시 단락)
+ * ③ sentryBeforeSend PII 스크럽(마지막 방어선)
+ *
+ * existing이 PromiseLike를 반환하면 then으로 ③을 이어 붙인다(동기 경로는 동기 유지).
+ */
+export const composeBeforeSend =
+  (existing?: BeforeSend): BeforeSend =>
+  (event, hint) => {
+    // ① 파이프라인 소유 에러의 "자동 캡처본"을 드롭한다(이중 캡처를 규약으로 차단).
+    // 실제 메커니즘(P0b 리뷰로 정밀화): 마커는 createHandleError가 "원본 input"에 건다.
+    //  - non-AppError 입력: 파이프라인본의 originalException은 wrapped AppError(비마킹)라
+    //    isPipelineCaptured가 false → 첫 조건에서 단락 통과. 드롭되는 것은 원본을 rethrow한
+    //    자동 캡처본(originalException === 마킹된 원본, 태그 없음)뿐이다.
+    //  - AppError 직접 입력: input === failure.error라 파이프라인본의 originalException도
+    //    마킹된다 — 이때는 errsys.source="pipeline" 태그 가드가 파이프라인본을 살린다.
+    // 트레이드오프(수용됨): beforeSend는 transport 이전에 실행되므로, 파이프라인본의 네트워크
+    // 전송이 실패하면 자동 캡처본은 이미 드롭된 뒤다(동반 유실 가능). 전송 신뢰성은
+    // guardedCompositeReporter/dead-man's-switch가 담당한다. 단, 마킹 자체가 "capture가
+    // 실제 실행된 경우"에만 걸리므로(sample-out·sink-throw 시 비마킹) 자동 캡처 안전망은
+    // 그 경로들에서 살아 있다.
+    if (
+      isPipelineCaptured(hint.originalException) &&
+      event.tags?.["errsys.source"] !== "pipeline"
+    ) {
+      return null;
+    }
+
+    // ② 대상의 기존 beforeSend. null 반환 시 단락(③ 스크럽도 건너뛴다).
+    const afterExisting = existing ? existing(event, hint) : event;
+    if (afterExisting === null) return null;
+
+    // ③ PII 스크럽은 마지막 방어선 — existing이 비동기면 await 후 적용(동기는 동기 유지).
+    if (isPromiseLike(afterExisting)) {
+      return afterExisting.then((e) => (e === null ? null : sentryBeforeSend(e)));
+    }
+    return sentryBeforeSend(afterExisting);
+  };

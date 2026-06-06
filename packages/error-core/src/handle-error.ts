@@ -10,6 +10,7 @@ import type {
   OccurrenceContext,
   RuntimeContext,
 } from "./decision/types";
+import { markPipelineCaptured } from "./pipeline-captured";
 
 /**
  * The slice of a DecisionSystem the delegate consumes — only finalizeUnknown + executeErrorDecision.
@@ -72,6 +73,30 @@ export const createHandleError =
       };
     }
     const ctx: TelemetryContext = { ...baseCtx, ...options.ctx };
-    guardSink(() => system.executeErrorDecision(failure.error, failure.decision, ctx, sinks));
+    // 파이프라인 캡처 소유 마킹은 "capture가 실제로 실행된 경우"에만 건다(P0b 리뷰 P1):
+    // capture 의도(불리언)에 걸면 sample-out·sink-throw 시 파이프라인본이 Sentry에 가지
+    // 않았는데도 자동 캡처본까지 드롭되어 이벤트 0건(가시성 완전 상실)이 된다. tracking
+    // reporter는 capture 호출이 throw 없이 완료된 뒤에만 captured를 세운다 — sink 실패와
+    // 샘플아웃이 한 메커니즘으로 처리된다(둘 다 captured=false → 자동 캡처가 안전망으로 남는다).
+    let captured = false;
+    const trackingSinks: HandleErrorSinks = {
+      reporter: {
+        capture(error, decision, captureCtx) {
+          sinks.reporter.capture(error, decision, captureCtx);
+          captured = true; // capture가 throw하면 도달하지 않는다 — 마킹도 일어나지 않는다.
+        },
+        breadcrumb(error, decision, breadcrumbCtx) {
+          sinks.reporter.breadcrumb(error, decision, breadcrumbCtx);
+        },
+      },
+      notifier: sinks.notifier,
+    };
+    guardSink(() => system.executeErrorDecision(failure.error, failure.decision, ctx, trackingSinks));
+    // 마킹은 원본 input에 건다(capture되는 wrapped AppError가 아니라): Track-2가 rethrow하는
+    // 것은 원본이고 Sentry 자동 캡처가 잡는 것도 원본이므로, 합성 beforeSend가 매칭하려면
+    // 마커가 원본에 있어야 한다. input이 AppError면 input === failure.error라 파이프라인본의
+    // originalException도 마킹된다 — 그 경우 composeBeforeSend의 errsys.source 태그 가드가
+    // 파이프라인본을 살린다.
+    if (captured) markPipelineCaptured(input);
     return failure;
   };

@@ -41,6 +41,9 @@ export {
 export type { HandleErrorDeps } from "./types";
 export { createHandleError, type HandleErrorOptions } from "./handle-error";
 
+// ── 파이프라인 캡처 소유 마커 (Sentry 이중 캡처 차단 — 합성 beforeSend가 소비) ────────
+export { markPipelineCaptured, isPipelineCaptured } from "./pipeline-captured";
+
 // ── 순수 리포터 어댑터 (벤더 SDK 없음) — dead-man's-switch (P6 재도입) ──────
 export {
   guardedCompositeReporter,
