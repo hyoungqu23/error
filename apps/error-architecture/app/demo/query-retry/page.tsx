@@ -106,7 +106,9 @@ export default function QueryRetryDemo() {
               className="danger"
               onClick={() =>
                 // 이 버튼은 페이지 전환이 아니라 인라인 위젯의 에러 — occurrence를 component
-                // scope로 명시해야 resolve가 page 에스컬레이션 대신 toast/inline을 고른다.
+                // scope로 두면 resolve가 page 에스컬레이션 대신 toast/inline을 고른다. (이제
+                // useErrorHandler의 기본값이기도 하다 — 미명시 시 component가 주입되어 이벤트
+                // 핸들러 throw 함정을 막는다. 여기선 interaction:"query"도 함께 명시한다.)
                 presentFailure(
                   handleError(error, {
                     occurrence: { interaction: "query", uiScope: "component" },
