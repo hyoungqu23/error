@@ -10,7 +10,7 @@
 ## 표면
 
 ### `error-next` (클라이언트)
-- `useErrorHandler` — 인터랙션 경계 훅(redirect/login·page 에스컬레이션 + returnTo).
+- `useErrorHandler` — 인터랙션 경계 훅. 미명시 시 `occurrence.uiScope`가 `"component"`로 기본 주입되어 이벤트 핸들러 throw 함정(미처리 예외→UI 없는 화면 깨짐)을 막는다. page 에스컬레이션(error.tsx로의 의도된 re-throw)은 `occurrence.uiScope="page"` 명시 opt-in이다(render 경로 전용). login/redirect 내비게이션(`+ returnTo`)은 surface와 독립적으로 보존된다(action `"login"`/surface `"redirect"`).
 - `makeQueryClient` / `shouldRetryQuery` — TanStack QueryClient 기본(catalog `defaultRetryable` 배선).
 - `ErrorFallback` — 공유 렌더링 경계 UI(`unstable_retry` ?? `reset` ?? reload).
 - `ErrorHandlerInit` — 클라 싱글턴 sink 부트스트랩(no-op sink 기본).
@@ -41,5 +41,5 @@
 ## 테스트
 
 ```bash
-pnpm --filter error-next test   # 42 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
+pnpm --filter error-next test   # 73 tests (server 모듈은 vi.mock, 컴포넌트는 jsdom)
 ```
