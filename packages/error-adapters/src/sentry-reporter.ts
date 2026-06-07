@@ -136,12 +136,16 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
   );
 
   return {
-    capture(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext) {
+    capture(error: AppError, decision: TelemetryDecision, ctx: TelemetryContext): boolean {
       // (3) Storm vector: only window-boundary events (route tag set by §8.3) are bucketed.
       const fromBrowserBoundary =
         ctx.route === "window.onerror" || ctx.route === "window.onunhandledrejection";
       if (fromBrowserBoundary && !browserBucket.allow()) {
-        return; // dropped by throttle; not an error — do NOT feed the dead-man's-switch.
+        // 스톰 throttle 드롭: 이벤트가 Sentry로 가지 않았다. capture 반환 프로토콜상 `false`를
+        // 반환해 파이프라인이 dedupe 마킹을 못 하게 한다 — 마킹하면 자동 캡처 안전망본까지
+        // composeBeforeSend가 드롭해 스톰 시 이벤트 0건이 된다. (dead-man's-switch에는 throw로
+        // 신호하지 않는다 — 의도적 드롭이지 sink 실패가 아니므로.)
+        return false;
       }
 
       // @sentry/nextjs v8: the 2nd arg is a CaptureContext; the callback form
@@ -186,6 +190,9 @@ export const createSentryReporter = (config: SentryReporterConfig = {}): SentryR
         );
         return scope;
       });
+      // 캡처 반환 프로토콜: captureException이 실행됐으니 원격 전송됨 → `true`. 파이프라인은
+      // 이 원본을 마킹하고 composeBeforeSend가 자동 캡처본을 드롭(이중 캡처 차단).
+      return true;
     },
     // (G5) T1 impact breadcrumb — NOT a re-capture. A breadcrumb attaches to the
     // NEXT captured event in this scope, stitching the user-visible impact to the
@@ -272,9 +279,10 @@ export const composeBeforeSend =
     //    마킹된다 — 이때는 errsys.source="pipeline" 태그 가드가 파이프라인본을 살린다.
     // 트레이드오프(수용됨): beforeSend는 transport 이전에 실행되므로, 파이프라인본의 네트워크
     // 전송이 실패하면 자동 캡처본은 이미 드롭된 뒤다(동반 유실 가능). 전송 신뢰성은
-    // guardedCompositeReporter/dead-man's-switch가 담당한다. 단, 마킹 자체가 "capture가
-    // 실제 실행된 경우"에만 걸리므로(sample-out·sink-throw 시 비마킹) 자동 캡처 안전망은
-    // 그 경로들에서 살아 있다.
+    // guardedCompositeReporter/dead-man's-switch가 담당한다. 단, 마킹은 "원격 관측 시스템에
+    // 실제로 전송된 경우"에만 걸린다(capture 반환 프로토콜, error-core types.ts ReporterSink) —
+    // sample-out·sink-throw·throttle-drop·guarded-swallow 시 비마킹이므로 자동 캡처 안전망이
+    // 그 경로들에서 살아 있다(최악 피해는 중복 1건이지 0건이 아니다).
     if (
       isPipelineCaptured(hint.originalException) &&
       event.tags?.["errsys.source"] !== "pipeline"
