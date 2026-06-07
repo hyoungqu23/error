@@ -202,6 +202,26 @@ describe("createSentryReporter (P6 ReporterSink wiring)", () => {
     expect(reporter.droppedTotal()).toBe(1);
   });
 
+  // ── capture 반환 프로토콜 (이중 캡처 마커 dedupe 입력) ──────────────────────────────────
+  // 마킹은 "원격 전송 실제 발생" 시에만 — throttle-drop은 false, 정상 전송은 true를 반환해야
+  // 한다(handle-error tracking 래퍼가 captured = capture(...) !== false로 판정).
+  it("capture returns false on a throttle-drop (so the pipeline does NOT mark → auto-capture survives)", () => {
+    const reporter = createSentryReporter({ browserBurstCapacity: 1, browserRefillPerSec: 0 });
+    const error = makeError({ code: "UNKNOWN_CLIENT_ERROR", details: null });
+    const browserCtx: TelemetryContext = { ...CTX, runtime: "client", route: "window.onerror" };
+
+    expect(reporter.capture(error, decision(), browserCtx)).toBe(true); // 1st — sent
+    expect(reporter.capture(error, decision(), browserCtx)).toBe(false); // 2nd — throttle-drop
+  });
+
+  it("capture returns true when the event is actually sent (non-boundary route is never bucketed)", () => {
+    const reporter = createSentryReporter();
+    const error = makeError({ code: "HTTP_SERVER_ERROR", details: { status: 500 } });
+
+    expect(reporter.capture(error, decision(), CTX)).toBe(true);
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
   it("breadcrumb reads surface from decision.tags.surface (null when absent)", () => {
     const reporter = createSentryReporter();
     const error = makeError({ code: "OFFLINE", details: null });

@@ -143,6 +143,19 @@ export interface DecisionSystemOptions<
    * `defaultMessageKey` can never leak through a `safe-vague`/`generic`/`support-only` decision.
    */
   validateMessageKeys?: boolean;
+  /**
+   * Promoter for non-AppError catch values: maps a raw caught value to a KNOWN AppError, or null
+   * when no specific shape applies. `finalizeUnknown` tries it FIRST; on null it falls back to this
+   * system's own `fallbackErrorCode` (so the P2 server/client UNKNOWN split is never collapsed).
+   *
+   * LAYERING: `decision/` is catalog-generic and must NOT know CANONICAL codes — so the promoter is
+   * INJECTED, never hardcoded here. The host (error-next) wires `tryNormalizeKnownError`.
+   *
+   * SAFE BY CONSTRUCTION: a promoted AppError still flows through the same `finalizeAppError`, so
+   * the codeKnown / validateDetails (D1) gate degrades any out-of-catalog promotion to this
+   * system's safe fallback fault — a promoter returning an unknown code can never leak it to wire.
+   */
+  normalizeUnknown?: (input: unknown) => AppError | null;
 }
 
 export interface DecisionSystem<
@@ -350,6 +363,24 @@ export const createDecisionSystem = <
     runtime?: Partial<RuntimeContext>,
   ): DecisionFailure => {
     if (isAppError(input)) return finalizeAppError(input, occurrence, runtime);
+    // Try the injected promoter first so raw framework/network errors (AbortError →
+    // REQUEST_ABORTED, fetch TypeError → NETWORK_ERROR/OFFLINE, TimeoutError → TIMEOUT) get a
+    // dedicated retryable/operational code instead of being flattened to the fallback fault.
+    // A promoted AppError still passes through finalizeAppError, whose codeKnown/validateDetails
+    // (D1) gate safely degrades any out-of-catalog promotion to this system's fallbackErrorCode.
+    // On null (plain Error, string, etc.) we fall back to THIS system's fallbackErrorCode so the
+    // P2 server(UNKNOWN_SERVER_ERROR)/client(UNKNOWN_CLIENT_ERROR) split is preserved — the
+    // promoter must never carry its own UNKNOWN_* fallback (that would collapse the split).
+    //
+    // R2: 주입 promoter 호출을 try/catch로 감싼다 — 에러 처리는 에러 소스가 되면 안 된다(injected
+    // 코드라 throw할 수 있다). promoter가 throw하면 null로 취급해 아래 fallback 래핑으로 강등한다.
+    let promoted: AppError | null = null;
+    try {
+      promoted = options.normalizeUnknown?.(input) ?? null;
+    } catch {
+      promoted = null;
+    }
+    if (promoted) return finalizeAppError(promoted, occurrence, runtime);
     return finalizeAppError(appError(options.fallbackErrorCode, null, { cause: input }), occurrence, runtime);
   };
 

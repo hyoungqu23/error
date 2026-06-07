@@ -57,7 +57,7 @@ export {
 export { createConsoleReporter } from "./adapters/console-reporter";
 
 // ── 정규화 + 헬퍼 ───────────────────────────────────────────────────────────
-export { normalizeToAppError } from "./normalize";
+export { normalizeToAppError, tryNormalizeKnownError } from "./normalize";
 export { fieldErrorsFromError } from "./field-errors";
 
 // ── 재시도 정책(순수) + 네트워크 경계(isomorphic) ──────────────────────────

@@ -12,7 +12,7 @@
 - **단일 누출게이트** — `toClientErrorPayload`: free-text `message` 미전송 + `details`는 catalog allowlist shallow-pick. wire `Result`는 `degrade()`로 이 payload만 건넌다. `networkBoundary`가 이 public DTO를 다시 `AppError`로 재수화한다. allowlist pick 로직은 `pickAllowlistedDetails`로 export되어 어댑터(예: `error-adapters/sentry-reporter`의 클라이언트 details 게이트)가 같은 구현을 재사용한다 — 게이트 로직 drift가 구조적으로 불가능하다.
 - **텔레메트리 3-sink 계약** — `ReporterSink`/`NotifierSink`(파이프라인 `executeErrorDecision`이 호출) + `Presenter`(파이프라인 밖 소비자 계약) + 단일 처리 경로(`createHandleError`).
 - **순수 재시도 정책** — `computeRetryDelay`, `parseRetryAfter`(상한 클램프, client+server safe), `retryAfterHintFromError`(인스턴스 우선).
-- **네트워크 경계** — `networkBoundary`(raw transport → `AppError`, 8개 transport 코드의 유일 생산자).
+- **네트워크 경계** — `networkBoundary`(raw transport → `AppError`, 8개 transport 코드의 1차 생산자). 경계를 우회한 raw catch는 system `normalizeUnknown`(=`tryNormalizeKnownError`)이 같은 transport 코드 일부로 복구 승격한다.
 - **클라이언트 싱글턴 sink** — `initHandleError`/`handleError`(react/next 의존 없음).
 - **순수 리포터 어댑터** — `createConsoleReporter`, `guardedCompositeReporter`(dead-man's-switch + `health()`).
 
@@ -36,5 +36,5 @@ import { networkBoundary } from "error-core/network-boundary";
 ## 테스트
 
 ```bash
-pnpm --filter error-core test   # 296+ tests
+pnpm --filter error-core test   # 334 tests
 ```

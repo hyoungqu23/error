@@ -43,5 +43,5 @@ const presenter = createSonnerPresenter();
 ## 테스트
 
 ```bash
-pnpm --filter error-adapters test   # 21 tests
+pnpm --filter error-adapters test   # 29 tests
 ```

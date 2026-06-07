@@ -329,6 +329,89 @@ describe("createDecisionSystem (P3a)", () => {
     expect(JSON.stringify(finalized.payload)).not.toContain("boom");
   });
 
+  it("finalizeUnknown: injected normalizeUnknown promotes a raw AbortError to REQUEST_ABORTED", () => {
+    // The promoter recognizes framework/network Error shapes; the dedicated retryable/operational
+    // code survives because it is in the catalog (codeKnown gate passes).
+    const promoting = createDecisionSystem({
+      errors: CANONICAL_ERROR_SEMANTICS,
+      operations: {
+        x: { operation: "x", owner: "t", criticality: "normal", defaultUiScope: "page", piiRisk: false },
+      },
+      fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+      normalizeUnknown: (input) => {
+        const e = input as Error;
+        return e?.name === "AbortError" ? appError("REQUEST_ABORTED", null, { cause: e }) : null;
+      },
+    });
+    const occurrence = promoting.makeOccurrence("x", { interaction: "query", uiScope: "page" });
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    const finalized = promoting.finalizeUnknown(abort, occurrence, { runtime: "server" });
+    expect(finalized.error.code).toBe("REQUEST_ABORTED");
+  });
+
+  it("finalizeUnknown: with no normalizeUnknown, behavior is unchanged (fallback fault)", () => {
+    // Regression pin: the promoter is purely additive — omitting it preserves the legacy fallback.
+    const occurrence = sys.makeOccurrence("product.read", { interaction: "query", uiScope: "page" });
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    const finalized = sys.finalizeUnknown(abort, occurrence, { runtime: "server" });
+    expect(finalized.error.code).toBe("UNKNOWN_SERVER_ERROR");
+  });
+
+  it("finalizeUnknown: a promoter returning null falls back to the system fallbackErrorCode", () => {
+    // P2 split: promoter declines (returns null) → each system uses its OWN fallback. Here the
+    // server system must NOT collapse a plain Error onto some promoter-internal UNKNOWN_*.
+    const promoting = createDecisionSystem({
+      errors: CANONICAL_ERROR_SEMANTICS,
+      operations: {
+        x: { operation: "x", owner: "t", criticality: "normal", defaultUiScope: "page", piiRisk: false },
+      },
+      fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+      normalizeUnknown: () => null,
+    });
+    const occurrence = promoting.makeOccurrence("x", { interaction: "query", uiScope: "page" });
+    const finalized = promoting.finalizeUnknown(new Error("plain"), occurrence, { runtime: "server" });
+    expect(finalized.error.code).toBe("UNKNOWN_SERVER_ERROR");
+  });
+
+  it("finalizeUnknown: a THROWING promoter is treated as null and degrades to the fallback (R2)", () => {
+    // 에러 처리는 에러 소스가 되면 안 된다 — 주입 promoter가 throw하면 null로 취급해 fallback
+    // 래핑으로 강등하고, finalizeUnknown 자체는 throw하지 않는다.
+    const promoting = createDecisionSystem({
+      errors: CANONICAL_ERROR_SEMANTICS,
+      operations: {
+        x: { operation: "x", owner: "t", criticality: "normal", defaultUiScope: "page", piiRisk: false },
+      },
+      fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+      normalizeUnknown: () => {
+        throw new Error("promoter blew up");
+      },
+    });
+    const occurrence = promoting.makeOccurrence("x", { interaction: "query", uiScope: "page" });
+    let finalized!: ReturnType<typeof promoting.finalizeUnknown>;
+    expect(() => {
+      finalized = promoting.finalizeUnknown(new Error("x"), occurrence, { runtime: "server" });
+    }).not.toThrow();
+    expect(finalized.error.code).toBe("UNKNOWN_SERVER_ERROR");
+  });
+
+  it("finalizeUnknown: a promoter returning an out-of-catalog code is degraded by the D1 gate", () => {
+    // The promoter is injected and may misbehave; finalizeAppError's codeKnown gate guarantees an
+    // unknown code can never reach the wire — it degrades to the system fallback fault.
+    const promoting = createDecisionSystem({
+      errors: CANONICAL_ERROR_SEMANTICS,
+      operations: {
+        x: { operation: "x", owner: "t", criticality: "normal", defaultUiScope: "page", piiRisk: false },
+      },
+      fallbackErrorCode: "UNKNOWN_SERVER_ERROR",
+      normalizeUnknown: () => appError("NOT_IN_CATALOG_AT_ALL", null),
+    });
+    const occurrence = promoting.makeOccurrence("x", { interaction: "query", uiScope: "page" });
+    const finalized = promoting.finalizeUnknown(new Error("x"), occurrence, { runtime: "server" });
+    expect(finalized.error.code).toBe("UNKNOWN_SERVER_ERROR");
+    // The forged code never appears on the wire.
+    expect(JSON.stringify(finalized.payload)).not.toContain("NOT_IN_CATALOG_AT_ALL");
+  });
+
   it("supportCode comes from correlationId for support-only/generic-fault disclosures", () => {
     const finalized = sys.finalizeUnknown(
       appError("SCHEMA_MISMATCH"),
@@ -373,7 +456,8 @@ describe("createDecisionSystem telemetry execution (P3a)", () => {
     let captured = 0;
     let breadcrumbs = 0;
     system.executeTelemetryDecision(appError("TIMEOUT"), decision, ctx, {
-      reporter: { capture: () => captured++, breadcrumb: () => breadcrumbs++ },
+      // 카운터 부수효과만 — 캡처 반환 프로토콜(void | boolean)에 맞게 반환은 버린다.
+      reporter: { capture: () => void captured++, breadcrumb: () => breadcrumbs++ },
       notifier: { alert: () => undefined },
     });
     return { captured, breadcrumbs };

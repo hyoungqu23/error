@@ -8,8 +8,8 @@
 
 - [x] **Phase 0 (원본 선행 작업) — 완료** (PR #3, main `876b9c7`, 2026-06-06)
   - [x] 0a: `safeFormAction`/`safeServerAction` validator-agnostic — `FormValidator` 계약 + `zodFormValidator` + `toWireFieldErrors`(`_form` 합류)
-  - [x] 0b: Sentry 이중 캡처 마커 — `markPipelineCaptured`(원본 input, capture **실제 실행** 시에만) + `composeBeforeSend`(①마커드롭→②기존 beforeSend→③PII 스크럽)
-  - [x] 테스트 391 / 게이트 typecheck·test·lint·build 12/12
+  - [x] 0b: Sentry 이중 캡처 마커 — `markPipelineCaptured`(원본 input, **원격 관측 시스템에 실제 전송 시에만** — throttle-drop·sink-throw·sample-out·guarded-swallow 시 비마킹; capture 반환 프로토콜) + `composeBeforeSend`(①마커드롭→②기존 beforeSend→③PII 스크럽)
+  - [x] 테스트 436 / 게이트 typecheck·test·lint·build 12/12
 - [ ] 대상 10-사실 인벤토리 (아래)
 - [ ] PR1 — 복사 + workspace 등록 + **CI 게이트 결합(완료 조건)**
 - [ ] PR2a — 관측 배선 (Sentry 합성 + 컴포지션 루트 + ESLint 가드레일; 폼 코드 무접촉)
@@ -25,7 +25,7 @@
 - [ ] 6. `error-core`/`error-adapters`/`error-next` 패키지명 충돌 또는 `@org/*` 스코프 규약? (bare cross-import 27곳 — rename 시 import+tsconfig paths+vitest alias 일괄 치환)
 - [ ] 7. ESLint 메이저 + flat-config? / pnpm·Node 버전 (pnpm 11 = Node ≥22.13)
 - [ ] 8. `.npmrc` — `strict-peer-dependencies` **및** `auto-install-peers` (이 레포는 auto-install=true+strict=false에 의존)
-- [ ] 9. 에러 라우트·라우트 가드 경계 — `/login`·`/403`·`error.tsx` 존재? 기존 RouteGuard의 리다이렉트 규약 vs `useErrorHandler` 하드 매핑(AUTH_REQUIRED→`/login?returnTo`, FORBIDDEN→`/403`) 충돌?
+- [ ] 9. 에러 라우트·라우트 가드 경계 — `/login`·`/403`·`error.tsx` 존재? 기존 RouteGuard의 리다이렉트 규약 vs `useErrorHandler` 매핑 충돌? — AUTH_REQUIRED→`/login?returnTo`는 action `"login"` 분기가 surface와 독립적으로 보존하므로 **기본값으로도 유지**되고, FORBIDDEN→`/403`은 `useErrorHandler`가 `uiScope="page"` 명시(opt-in)로 surface가 `"page"`로 해소될 때만 내비게이션한다(미명시 기본값 component→inline·request-access는 자동 내비게이션하지 않음).
 - [ ] 10. 폼 검증 스택(zod? — `FormValidator` 어댑터를 어느 라이브러리용으로 쓸지) + **대상 도메인 PII 민감 필드**(카탈로그 allowlist·스크럽이 대상 기준으로도 안전한지)
 
 정적으로 확인 안 되는 항목(peer 해소·CI 거동)은 PR1을 **드래프트로 올려 대상 CI 드라이런**으로 확인.
@@ -39,7 +39,7 @@
 - [ ] `pnpm-workspace.yaml`에 경로 등록 → `pnpm install`로 lockfile 재생성
 - [ ] tsconfig 정합 — `moduleResolution: "bundler"`, `module: "ESNext"`, `strict`, `isolatedModules`
 - [ ] 의존성 — zod(core), `server-only`(**dependencies** — `import "server-only"` 7곳), error-next peers(next/react/react-dom/@tanstack), optional peers(sonner — 토스트 채택 시)
-- [ ] **대상 CI에 반입 패키지 typecheck/test/lint 태스크 추가 — PR1 완료 조건** (391은 "패키지 무결성 게이트"이며 통합 게이트가 아님 — 통합은 PR2b의 E2E)
+- [ ] **대상 CI에 반입 패키지 typecheck/test/lint 태스크 추가 — PR1 완료 조건** (436은 "패키지 무결성 게이트"이며 통합 게이트가 아님 — 통합은 PR2b의 E2E)
 - 롤백: 디렉터리 삭제 + CI 태스크 제거 한 번
 
 ## 2. PR2a — 관측 배선 (기존 에러 흐름 무변경이 완료 기준)
@@ -62,7 +62,7 @@
 
 ## 성공 기준
 
-- 반입 게이트: 대상에서 typecheck + 391 테스트 + lint + 대상 앱 빌드 green
+- 반입 게이트: 대상에서 typecheck + 436 테스트(core 334 · adapters 29 · next 73) + lint + 대상 앱 빌드 green
 - Sentry: 기존 beforeSend 동작 유지 / [리스크 지표] 전환 폼 에러 1회 캡처(이중 보고 dedupe는 Phase 0b 마커가 담당 — 첫 측정 2건이면 PR2a 미완으로 처리)
 - 누출게이트: 해당 슬라이스 wire 응답에 `message` 필드 부재 + details는 allowlist만
 - 팀: 첫 PR 1주 내 머지(리뷰 정체 모니터링)
@@ -74,4 +74,4 @@
 3. `server-only`가 **dependencies**(7 import sites) — 누락 시 즉시 깨짐
 4. 패키지 로컬 tsconfig `paths`가 load-bearing
 5. `.npmrc` `auto-install-peers=true` 의존 — 대상에서 꺼져 있으면 필수 peer도 설치 안 됨
-6. 자동캡처↔파이프라인 dedupe는 Phase 0b 마커가 해결(범용 dedupe 시스템 만들지 말 것) — 마킹은 capture **실제 실행** 시에만(sample-out·sink-throw 시 자동 캡처가 안전망)
+6. 자동캡처↔파이프라인 dedupe는 Phase 0b 마커가 해결(범용 dedupe 시스템 만들지 말 것) — 마킹은 **마커 소비 원격 transport(현재 Sentry)에 실제 전송 시에만**(capture 반환 프로토콜: `true`=전송, `false`=비전송, `undefined`(legacy void)=전송 주장 없음→비전송). sample-out·sink-throw·throttle-drop·guarded-swallow 시 비마킹이라 자동 캡처가 안전망(최악 피해는 중복 1건이지 0건이 아님). composite 집계는 **OR이되 "전송됨"은 오직 명시적 `true`만** 집계하고 `undefined`(legacy void sink)는 **비전송**으로 취급한다(Codex P1: undefined를 전송으로 치면 void sink 하나만 끼어도 Sentry throttle-drop을 깔아뭉개 마킹→자동 캡처본 드롭→스톰 시 0건 부활). 비-원격 sink(console/noop: 항상 `false`)나 legacy void sink는 같은 composite의 원격 sink(Sentry: `true`) 마킹을 깔아뭉개지 않는다(레퍼런스 Sentry+console 배선의 정상 캡처 이중 보고 방지). 멀티 원격 sink 케이빗: 마커를 실제 소비(자동 캡처본 드롭)하는 곳은 Sentry `beforeSend` 한 곳뿐이므로 `true`는 마커 소비자(Sentry) 전송에만 의미가 있다. 가시성(전송 실패 가시화)은 OR 집계와 별개로 guarded composite의 throw 카운트(`health()`)가 담당
